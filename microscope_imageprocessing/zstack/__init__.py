@@ -1,6 +1,6 @@
 """Z-stack projection operators and utilities."""
 
-from microscope_imaging.zstack.projections import (
+from microscope_imageprocessing.zstack.projections import (
     max_intensity_projection,
     min_intensity_projection,
     sum_projection,

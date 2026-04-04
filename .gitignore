@@ -1,6 +1,56 @@
+# Python
 __pycache__/
-*.pyc
-*.egg-info/
-dist/
+*.py[cod]
+*$py.class
+*.so
+.Python
 build/
+develop-eggs/
+dist/
+downloads/
+eggs/
 .eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Large test data -- real microscopy images should be small or synthetic.
+# Keep committed test data under 100KB per file.
+# Real TIFF images for integration tests belong in tests/data/ but
+# exclude anything over 1MB.
+tests/data/*.tif
+!tests/data/synthetic_*.tif
+!tests/data/small_*.tif
+
+# Claude Code session scope
+CLAUDE.md
+*:Zone.Identifier

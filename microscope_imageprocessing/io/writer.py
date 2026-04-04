@@ -10,7 +10,7 @@ import numpy as np
 import tifffile as tf
 import logging
 
-import microscope_imaging
+import microscope_imageprocessing
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +43,7 @@ def ome_tiff_writer(
             options["compression"] = compression.lower()
 
         description = (
-            f"microscope_imaging={microscope_imaging.__version__}"
+            f"microscope_imageprocessing={microscope_imageprocessing.__version__}"
             f" python={platform.python_version()}"
         )
 

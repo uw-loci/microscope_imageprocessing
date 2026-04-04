@@ -5,6 +5,6 @@ Bayer pattern images into full RGB images. Supports RGGB, GRBG, GBRG,
 and BGGR patterns.
 """
 
-from microscope_imaging.debayering.cpu import CPUDebayer
+from microscope_imageprocessing.debayering.cpu import CPUDebayer
 
 __all__ = ["CPUDebayer"]

@@ -15,13 +15,13 @@ any microscopy workflow.
 
 try:
     from importlib.metadata import version as _get_version
-    __version__ = _get_version("microscope-imaging")
+    __version__ = _get_version("microscope-imageprocessing")
 except Exception:
     __version__ = "0.1.0.dev"
 
-from microscope_imaging.debayering import CPUDebayer
-from microscope_imaging.correction.background import BackgroundCorrectionUtils
-from microscope_imaging.io.writer import ome_tiff_writer
+from microscope_imageprocessing.debayering import CPUDebayer
+from microscope_imageprocessing.correction.background import BackgroundCorrectionUtils
+from microscope_imageprocessing.io.writer import ome_tiff_writer
 
 __all__ = [
     "CPUDebayer",
