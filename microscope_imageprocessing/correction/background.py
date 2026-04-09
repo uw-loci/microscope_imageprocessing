@@ -175,12 +175,19 @@ class BackgroundCorrectionUtils:
             attempted_paths = []
             background_file = None
 
-            # Search order: most specific to most general
+            # Search order: most specific to most general.
+            # Rotation modalities (PPM) use per-angle files (e.g. 7.0.tif).
+            # Non-rotation modalities (brightfield, fluorescence, monochrome)
+            # pass angle=0.0 as a sentinel and use background.tif -- this is
+            # the preferred name because 0.0.tif is confusing when the
+            # modality has no polarization/rotation angles.
             search_paths = [
-                # Direct angle file
+                # Direct angle file (per-angle, PPM)
                 search_dir / f"{angle}.tif",
-                # Angle subdirectory
+                # Angle subdirectory (legacy)
                 search_dir / str(angle) / "background.tif",
+                # Non-rotation single background file (BF/fluorescence/mono)
+                search_dir / "background.tif",
             ]
 
             for path in search_paths:
