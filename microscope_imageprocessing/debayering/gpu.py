@@ -70,9 +70,10 @@ class GPUDebayer:
         rgb[:,:,1][g_mask] = img[g_mask]
         rgb[:,:,2][b_mask] = img[b_mask]
 
-        # Clip values and convert back to CPU
-        rgb = cp.clip(rgb, 0, 255)
-        return cp.asnumpy(rgb).astype(np.uint8)
+        # Clip values and convert back to CPU, preserving input dtype
+        max_val = cp.iinfo(cp.asarray(bayer_img).dtype).max if bayer_img.dtype.kind == 'u' else 255
+        rgb = cp.clip(rgb, 0, max_val)
+        return cp.asnumpy(rgb).astype(bayer_img.dtype)
 
 # Usage example
 if __name__ == "__main__":

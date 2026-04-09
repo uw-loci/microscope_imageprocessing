@@ -63,6 +63,3 @@ def format_imagetags(tags: dict) -> dict:
     return dx
 
 
-def apply_brightness_correction(image: np.ndarray, correction_factor: float) -> np.ndarray:
-    """Apply brightness correction to an image."""
-    return np.clip(image * correction_factor, 0, 255).astype(np.uint8)
