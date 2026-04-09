@@ -170,6 +170,46 @@ class BackgroundCorrectionUtils:
                 logger.error(f"Modality directory not found: {search_dir}")
             return backgrounds, scaling_factors, white_balance_coeffs
 
+        # Non-rotation modalities (brightfield, widefield fluorescence) pass
+        # an empty angles list. Treat this as a single background at angle 0
+        # so the search loop below finds `0.0.tif` / `background.tif`. Also
+        # auto-descend into a single WB-mode subdirectory if the caller
+        # pointed at the base path instead of the wb subfolder -- the Java
+        # resolver and the Python save path can disagree when
+        # background_settings.yml is missing from the wb subdir.
+        if not angles:
+            angles = [0.0]
+            if logger:
+                logger.info("No angles specified -- loading single non-rotation background at angle 0")
+
+            # If no .tif files live directly in search_dir, look for a single
+            # child directory (typically "off" for brightfield/fluorescence
+            # or a WB mode like "simple") that contains .tif files.
+            try:
+                direct_tifs = list(search_dir.glob("*.tif"))
+                if not direct_tifs and search_dir.is_dir():
+                    subdirs_with_tifs = [
+                        d for d in search_dir.iterdir()
+                        if d.is_dir() and any(d.glob("*.tif"))
+                    ]
+                    if len(subdirs_with_tifs) == 1:
+                        if logger:
+                            logger.info(
+                                "No .tif in %s; descending into single WB subdirectory: %s",
+                                search_dir, subdirs_with_tifs[0].name,
+                            )
+                        search_dir = subdirs_with_tifs[0]
+                    elif len(subdirs_with_tifs) > 1:
+                        if logger:
+                            logger.warning(
+                                "Multiple WB subdirectories found in %s (%s); "
+                                "cannot auto-select. Caller should point directly at the WB subdir.",
+                                search_dir, [d.name for d in subdirs_with_tifs],
+                            )
+            except Exception as e:
+                if logger:
+                    logger.debug("Error scanning for WB subdirectories: %s", e)
+
         for angle in angles:
             background_found = False
             attempted_paths = []
