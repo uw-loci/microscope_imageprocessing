@@ -261,21 +261,35 @@ class BackgroundCorrectionUtils:
 
                     scaling_factors[angle] = scaling_factor
 
-                    # Calculate white balance from background
-                    bg_mean = background_img.mean(axis=(0, 1))  # Mean R,G,B
-                    if len(bg_mean) >= 3 and bg_mean[1] > 0:  # Check G channel
-                        # Calculate relative gains to normalize to green channel
-                        white_balance_coeffs[angle] = [
-                            bg_mean[1] / bg_mean[0] if bg_mean[0] > 0 else 1.0,  # R correction
-                            1.0,  # G reference
-                            bg_mean[1] / bg_mean[2] if bg_mean[2] > 0 else 1.0,  # B correction
-                        ]
-                        if logger:
-                            logger.info(
-                                f"    White balance coeffs for {angle} deg: {white_balance_coeffs[angle]}"
-                            )
+                    # Calculate white balance from background.
+                    # Monochrome sensors (e.g. HAMAMATSU on OWS3) return a 2D
+                    # array; mean(axis=(0,1)) would reduce to a scalar and
+                    # len() on it would throw "numpy.float64 has no len()",
+                    # masking any real error that followed. White balance is
+                    # meaningless for single-channel data so use the identity
+                    # coeffs without computing anything.
+                    if background_img.ndim >= 3 and background_img.shape[-1] >= 3:
+                        bg_mean = background_img.mean(axis=(0, 1))  # Mean R,G,B
+                        if bg_mean[1] > 0:  # Check G channel
+                            # Calculate relative gains to normalize to green channel
+                            white_balance_coeffs[angle] = [
+                                bg_mean[1] / bg_mean[0] if bg_mean[0] > 0 else 1.0,  # R correction
+                                1.0,  # G reference
+                                bg_mean[1] / bg_mean[2] if bg_mean[2] > 0 else 1.0,  # B correction
+                            ]
+                            if logger:
+                                logger.info(
+                                    f"    White balance coeffs for {angle} deg: {white_balance_coeffs[angle]}"
+                                )
+                        else:
+                            white_balance_coeffs[angle] = [1.0, 1.0, 1.0]
                     else:
                         white_balance_coeffs[angle] = [1.0, 1.0, 1.0]
+                        if logger:
+                            logger.debug(
+                                f"    Monochrome background (ndim={background_img.ndim}); "
+                                f"skipping WB calculation for {angle} deg"
+                            )
 
                 except Exception as e:
                     if logger:
