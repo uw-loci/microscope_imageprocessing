@@ -487,9 +487,12 @@ class StackWriter:
         pix_size_t = files_size_t
         pix_size_c = 1 if c_filter is not None else eff_c
 
+        # DimensionOrder reflects the physical IFD layout produced by
+        # _write_file (T outer, C middle, Z inner) so readers that ignore
+        # TiffData and fall back to DimensionOrder still map IFDs correctly.
         pixels_attrs = {
             "ID": f"Pixels:{file_index}",
-            "DimensionOrder": "XYCZT",
+            "DimensionOrder": "XYZCT",
             "Type": _ome_pixel_type(self.dtype),
             "SizeX": str(self.size_x),
             "SizeY": str(self.size_y),
@@ -534,7 +537,31 @@ class StackWriter:
                     chan_attrs[xml_attr] = str(meta[meta_key])
             ET.SubElement(pixels, "Channel", chan_attrs)
 
-        # Per-plane metadata.
+        # TiffData elements map each IFD in the TIFF to its (T, C, Z) slot.
+        # OME-TIFF REQUIRES these for multi-dim stacks -- BioFormats (what
+        # QuPath uses) falls back to DimensionOrder only when TiffData is
+        # absent, which silently collapses Z-stacks in some readers.
+        # Iteration order here MUST match _write_file's loop order so IFD N
+        # corresponds to the Nth TiffData entry.
+        ifd_index = 0
+        channel_count = 1 if c_filter is not None else eff_c
+        for local_t in range(pix_size_t):
+            for local_c in range(channel_count):
+                for z_idx in range(eff_z):
+                    ET.SubElement(
+                        pixels,
+                        "TiffData",
+                        {
+                            "FirstT": str(local_t),
+                            "FirstC": str(local_c),
+                            "FirstZ": str(z_idx),
+                            "IFD": str(ifd_index),
+                            "PlaneCount": "1",
+                        },
+                    )
+                    ifd_index += 1
+
+        # Per-plane metadata (optional supplementary info per OME spec).
         for local_t in range(pix_size_t):
             global_t = t_offset + local_t
             for local_c, c_idx in enumerate(channel_range):
