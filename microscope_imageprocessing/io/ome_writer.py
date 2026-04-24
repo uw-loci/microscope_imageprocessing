@@ -395,20 +395,147 @@ class StackWriter:
         c_filter: Optional[int] = None,
         ome_xml: str,
     ) -> None:
-        """Stream planes for a single OME-TIFF file in XYCZT plane order."""
-        options: Dict[str, Any] = {
+        """Write one OME-TIFF. Delegates to tifffile's built-in OME-XML
+        generator for multi-dim stacks so the output matches the pattern
+        BioFormats/QuPath expect (simple <TiffData IFD="0" PlaneCount="N"/>,
+        DimensionOrder="XYCZT", no hand-rolled Plane elements).
+
+        The 2D adapter path (description_override set) keeps manual writes
+        to preserve byte-layout for existing callers.
+        """
+        if self.description_override is not None:
+            self._write_file_adapter(
+                path,
+                size_t_in_file,
+                size_z_in_file,
+                size_c_in_file,
+                t_offset=t_offset,
+                c_filter=c_filter,
+            )
+            return
+
+        # Detect RGB from the first written frame so we can pick correct axes.
+        sample_frame: Optional[np.ndarray] = None
+        for f in self._frames.values():
+            if f is not None:
+                sample_frame = f
+                break
+        is_rgb = (
+            sample_frame is not None
+            and sample_frame.ndim == 3
+            and sample_frame.shape[-1] == 3
+        )
+
+        if is_rgb:
+            data = np.zeros(
+                (
+                    size_t_in_file,
+                    size_z_in_file,
+                    size_c_in_file,
+                    self.size_y,
+                    self.size_x,
+                    3,
+                ),
+                dtype=self.dtype,
+            )
+            axes = "TZCYXS"
+        else:
+            data = np.zeros(
+                (
+                    size_t_in_file,
+                    size_z_in_file,
+                    size_c_in_file,
+                    self.size_y,
+                    self.size_x,
+                ),
+                dtype=self.dtype,
+            )
+            axes = "TZCYX"
+
+        for local_t in range(size_t_in_file):
+            global_t = t_offset + local_t
+            for local_c in range(size_c_in_file):
+                global_c = c_filter if c_filter is not None else local_c
+                for local_z in range(size_z_in_file):
+                    frame = self._frames.get((global_t, local_z, global_c))
+                    if frame is None:
+                        continue
+                    data[local_t, local_z, local_c] = frame.astype(
+                        self.dtype, copy=False
+                    )
+
+        metadata: Dict[str, Any] = {
+            "axes": axes,
+            "PhysicalSizeX": float(self.pixel_size_um),
+            "PhysicalSizeXUnit": "um",
+            "PhysicalSizeY": float(self.pixel_size_um),
+            "PhysicalSizeYUnit": "um",
+        }
+        if self.z_step_um is not None and size_z_in_file > 1:
+            metadata["PhysicalSizeZ"] = float(self.z_step_um)
+            metadata["PhysicalSizeZUnit"] = "um"
+        if self.time_increment_s is not None and size_t_in_file > 1:
+            metadata["TimeIncrement"] = float(self.time_increment_s)
+            metadata["TimeIncrementUnit"] = "s"
+        # Channel names in OME metadata; tifffile wires these into Channel
+        # elements.
+        if c_filter is not None:
+            channel_name_list = [
+                self.channel_names[c_filter]
+                if c_filter < len(self.channel_names)
+                else f"Channel {c_filter}"
+            ]
+        else:
+            channel_name_list = list(self.channel_names)
+        metadata["Channel"] = {"Name": channel_name_list}
+
+        write_kwargs: Dict[str, Any] = {
+            "bigtiff": self.bigtiff,
+            "metadata": metadata,
+            "resolution": (1e4 / self.pixel_size_um, 1e4 / self.pixel_size_um),
             "resolutionunit": "CENTIMETER",
         }
+        if self.photometric is not None:
+            write_kwargs["photometric"] = self.photometric
+        elif is_rgb:
+            write_kwargs["photometric"] = "rgb"
+        if self.compression is not None:
+            write_kwargs["compression"] = self.compression
+
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tf.imwrite(str(path), data, **write_kwargs)
+        logger.debug(
+            "StackWriter wrote %s (T=%d Z=%d C=%d%s) via tifffile OME",
+            path,
+            size_t_in_file,
+            size_z_in_file,
+            size_c_in_file,
+            " RGB" if is_rgb else "",
+        )
+
+    def _write_file_adapter(
+        self,
+        path: Path,
+        size_t_in_file: int,
+        size_z_in_file: int,
+        size_c_in_file: int,
+        *,
+        t_offset: int,
+        c_filter: Optional[int] = None,
+    ) -> None:
+        """2D legacy adapter write path. Used when description_override is set
+        (the ome_tiff_writer wrapper from writer.py). Keeps byte layout stable
+        for existing 2D callers.
+        """
+        options: Dict[str, Any] = {"resolutionunit": "CENTIMETER"}
         if self.photometric is not None:
             options["photometric"] = self.photometric
         if self.compression is not None:
             options["compression"] = self.compression
 
-        # The 2D adapter sets description_override AND short-circuits
-        # bigtiff to stay inside the classic TIFF limit; honor both.
+        path.parent.mkdir(parents=True, exist_ok=True)
         with tf.TiffWriter(str(path), bigtiff=self.bigtiff) as tif:
             plane_idx = 0
-            total_planes = size_t_in_file * size_z_in_file * size_c_in_file
             for local_t in range(size_t_in_file):
                 global_t = t_offset + local_t
                 for local_c in range(size_c_in_file):
@@ -416,18 +543,12 @@ class StackWriter:
                     for local_z in range(size_z_in_file):
                         frame = self._frames.get((global_t, local_z, global_c))
                         if frame is None:
-                            # Missing plane (aborted write). Fill zeros so the
-                            # OME-XML plane count stays consistent.
                             frame = np.zeros(
                                 (self.size_y, self.size_x), dtype=self.dtype
                             )
                         per_plane_opts = dict(options)
                         if plane_idx == 0:
-                            per_plane_opts["description"] = (
-                                self.description_override
-                                if self.description_override is not None
-                                else ome_xml
-                            )
+                            per_plane_opts["description"] = self.description_override
                             per_plane_opts["metadata"] = None
                         tif.write(
                             frame.astype(self.dtype, copy=False),
@@ -439,12 +560,6 @@ class StackWriter:
                             **per_plane_opts,
                         )
                         plane_idx += 1
-            logger.debug(
-                "StackWriter wrote %d/%d planes to %s",
-                plane_idx,
-                total_planes,
-                path,
-            )
 
     # ------------------------------------------------------------------
     # OME-XML assembly
