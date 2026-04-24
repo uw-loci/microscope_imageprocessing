@@ -98,6 +98,8 @@ class StackWriter:
         bigtiff: bool = True,
         compression: Optional[str] = None,
         software_tag: str = "QPSC",
+        photometric: Optional[str] = "minisblack",
+        description_override: Optional[str] = None,
     ) -> None:
         if size_t < 1 or size_z < 1 or size_c < 1:
             raise ValueError(
@@ -145,6 +147,14 @@ class StackWriter:
         self.bigtiff = bool(bigtiff)
         self.compression = compression
         self.software_tag = software_tag
+        # `photometric=None` lets tifffile auto-detect (e.g. RGB for
+        # (Y, X, 3) uint8 frames), matching the legacy 2D adapter's
+        # `photometric="rgb" if ndim==3 else "minisblack"` dispatch.
+        # `description_override` replaces the generated OME-XML in the
+        # first IFD; the 2D adapter uses this to preserve its byte layout
+        # for existing callers.
+        self.photometric = photometric
+        self.description_override = description_override
 
         self._lock = threading.Lock()
         self._closed = False
@@ -387,12 +397,15 @@ class StackWriter:
     ) -> None:
         """Stream planes for a single OME-TIFF file in XYCZT plane order."""
         options: Dict[str, Any] = {
-            "photometric": "minisblack",
             "resolutionunit": "CENTIMETER",
         }
+        if self.photometric is not None:
+            options["photometric"] = self.photometric
         if self.compression is not None:
             options["compression"] = self.compression
 
+        # The 2D adapter sets description_override AND short-circuits
+        # bigtiff to stay inside the classic TIFF limit; honor both.
         with tf.TiffWriter(str(path), bigtiff=self.bigtiff) as tif:
             plane_idx = 0
             total_planes = size_t_in_file * size_z_in_file * size_c_in_file
@@ -410,7 +423,11 @@ class StackWriter:
                             )
                         per_plane_opts = dict(options)
                         if plane_idx == 0:
-                            per_plane_opts["description"] = ome_xml
+                            per_plane_opts["description"] = (
+                                self.description_override
+                                if self.description_override is not None
+                                else ome_xml
+                            )
                             per_plane_opts["metadata"] = None
                         tif.write(
                             frame.astype(self.dtype, copy=False),
