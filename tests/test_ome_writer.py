@@ -70,7 +70,7 @@ class Test2DRoundTrip:
             xml = _ome_xml_from_file(out)
             assert 'SizeX="48"' in xml
             assert 'SizeY="32"' in xml
-            assert 'DimensionOrder="XYCZT"' in xml
+            assert 'DimensionOrder="XYZCT"' in xml
             assert 'PhysicalSizeX="0.5"' in xml
             assert 'PhysicalSizeY="0.5"' in xml
 
@@ -138,26 +138,31 @@ class TestMultiDimStack:
             assert f'SizeT="{T}"' in xml
             assert f'SizeZ="{Z}"' in xml
             assert f'SizeC="{C}"' in xml
-            assert 'DimensionOrder="XYCZT"' in xml
+            assert 'DimensionOrder="XYZCT"' in xml
             assert 'PhysicalSizeZ="1.0"' in xml
             assert 'TimeIncrement="15.0"' in xml
 
-            # OME-TIFF requires at least one TiffData element mapping IFDs to
-            # (T,C,Z). tifffile's built-in OME writer produces a single
-            # <TiffData IFD="0" PlaneCount="N"/> that relies on DimensionOrder
-            # to determine plane identity -- this is the simple form BioFormats
-            # (QuPath 0.7.0) consumes reliably.
-            assert xml.count("<TiffData") >= 1, "missing TiffData element"
-            assert f'PlaneCount="{T * Z * C}"' in xml or 'PlaneCount="1"' in xml
+            # The writer emits one <TiffData> per IFD with explicit
+            # FirstZ/FirstC/FirstT plus a matching <Plane> element with
+            # TheZ/TheC/TheT. Both kinds of mapping must be present so any
+            # reader (BioFormats, QuPath, Fiji) gets unambiguous IFD->plane
+            # assignment regardless of whether it prefers DimensionOrder
+            # inference or per-plane mapping.
+            assert xml.count("<TiffData") == T * Z * C, (
+                f"expected {T * Z * C} TiffData entries, got {xml.count('<TiffData')}"
+            )
+            assert xml.count("<Plane ") == T * Z * C, (
+                f"expected {T * Z * C} Plane entries, got {xml.count('<Plane ')}"
+            )
 
             # Verify each plane's value matches its (TheT, TheC, TheZ)
-            # assignment. DimensionOrder="XYCZT" means C fastest, Z middle,
-            # T slowest among IFDs.
+            # assignment. DimensionOrder="XYZCT" means Z fastest among IFDs,
+            # C next, T slowest -- write loop is for t: for c: for z.
             with tifffile.TiffFile(str(out)) as tif:
                 plane_idx = 0
                 for t in range(T):
-                    for z in range(Z):
-                        for c in range(C):
+                    for c in range(C):
+                        for z in range(Z):
                             data = tif.pages[plane_idx].asarray()
                             assert data[0, 0] == written[(t, z, c)], (
                                 f"plane {plane_idx} (t={t},c={c},z={z}) "
