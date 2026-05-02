@@ -36,22 +36,40 @@ from microscope_imageprocessing.focus.metrics import (
     modality_default_metric,
     resolve_metric,
 )
+from microscope_imageprocessing.focus.strategies import (
+    AutofocusStrategy,
+    DarkFieldStrategy,
+    DenseTextureStrategy,
+    ManualOnlyStrategy,
+    SparseSignalStrategy,
+    StrategyFailureMode,
+    build_strategy,
+    list_strategy_names,
+)
 from microscope_imageprocessing.focus.validity import (
     list_validity_check_names,
     resolve_validity_check,
 )
 
 __all__ = [
+    "AutofocusStrategy",
+    "DarkFieldStrategy",
+    "DenseTextureStrategy",
     "FocusMetricsManifest",
+    "ManualOnlyStrategy",
     "MetricSpec",
     "ParamSpec",
+    "SparseSignalStrategy",
+    "StrategyFailureMode",
     "StrategySpec",
     "UnknownMetricError",
     "ValidityCheckSpec",
+    "build_strategy",
     "clear_cache",
     "get_manifest",
     "load_manifest",
     "list_metric_names",
+    "list_strategy_names",
     "list_validity_check_names",
     "modality_default_metric",
     "resolve_metric",
