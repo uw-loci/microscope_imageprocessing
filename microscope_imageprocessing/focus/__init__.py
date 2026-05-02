@@ -36,6 +36,10 @@ from microscope_imageprocessing.focus.metrics import (
     modality_default_metric,
     resolve_metric,
 )
+from microscope_imageprocessing.focus.validity import (
+    list_validity_check_names,
+    resolve_validity_check,
+)
 
 __all__ = [
     "FocusMetricsManifest",
@@ -48,6 +52,8 @@ __all__ = [
     "get_manifest",
     "load_manifest",
     "list_metric_names",
+    "list_validity_check_names",
     "modality_default_metric",
     "resolve_metric",
+    "resolve_validity_check",
 ]
