@@ -48,11 +48,22 @@ logger = logging.getLogger(__name__)
 def _to_gray(image: np.ndarray) -> np.ndarray:
     """Reduce a multi-component frame to a 2D grayscale array.
 
-    For 3D input with at least 2 components, returns the green/index-1
-    channel (Bayer green or RGB green). For 1-component 3D input
-    (some camera SDKs return ``(H, W, 1)``), returns the squeeze. For
-    2D input, returns it unchanged. Always promotes to ``float64`` so
-    downstream metric math is exact.
+    For 3D input with >= 3 components: BT.601 luminance
+    Y = 0.299*R + 0.587*G + 0.114*B (standard photographic
+    grayscale). For 2-component 3D input: average of the two
+    channels. For 1-component 3D input (some camera SDKs return
+    ``(H, W, 1)``): squeeze. For 2D input: passthrough. Always
+    promotes to ``float64`` so downstream metric math is exact.
+
+    PRIOR DESIGN (failed PPM 40x 2026-05-04): green-channel-only
+    reduction missed the focus signal on JAI 3-CCD raw frames of
+    eosin-stained tissue. Eosin's strongest absorption is in the
+    green band, so the GREEN channel sees relatively flat
+    illumination at every Z while the RED channel carries most of
+    the focus-relevant contrast. The user could see histogram
+    change clearly in the live viewer (which displays luminance)
+    but every metric reported only 3-4% modulation across a 5 um
+    scan and the gaussian fit committed Z up to 5 um from truth.
     """
     if image is None:
         return np.empty((0, 0), dtype=np.float64)
@@ -60,10 +71,16 @@ def _to_gray(image: np.ndarray) -> np.ndarray:
     if arr.size == 0:
         return arr.astype(np.float64, copy=False)
     if arr.ndim == 3:
-        if arr.shape[2] >= 2:
-            arr = arr[:, :, 1]
-        else:
-            arr = arr[:, :, 0]
+        nch = arr.shape[2]
+        if nch >= 3:
+            arr_f = arr.astype(np.float64, copy=False)
+            return (0.299 * arr_f[:, :, 0]
+                    + 0.587 * arr_f[:, :, 1]
+                    + 0.114 * arr_f[:, :, 2])
+        if nch == 2:
+            arr_f = arr.astype(np.float64, copy=False)
+            return 0.5 * (arr_f[:, :, 0] + arr_f[:, :, 1])
+        arr = arr[:, :, 0]
     return arr.astype(np.float64, copy=False)
 
 
