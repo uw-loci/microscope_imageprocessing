@@ -343,6 +343,70 @@ class DarkFieldStrategy:
 
 
 @dataclass
+class DenseFluorescenceStrategy:
+    """For confluent fluorescent signal (whole-cell IF, dense membrane
+    stains, packed nuclei) where neither sparse_signal's bright-spot
+    count nor dense_texture's mid-gray tissue mask fits.
+
+    Validity = total gradient energy (the one validity check that does
+    not assume a particular brightness convention). Score = vollath_f5
+    by default -- the autocorrelation form rejects the shot noise that
+    wrecks plain variance metrics on fluorescence. Brightness = p99
+    above floor (mirrors DarkFieldStrategy: low median is normal for
+    FL, the bright tail is what matters).
+
+    Failure mode: PROCEED -- confluent FL with weak gradient energy can
+    still focus when the signal is uniform, so do not defer.
+    """
+
+    name: str = "dense_fluorescence"
+    on_failure: StrategyFailureMode = StrategyFailureMode.PROCEED
+    score_metric_name: str = "vollath_f5"
+    min_gradient_energy: float = 0.002
+    p99_floor: float = 30.0
+
+    def __post_init__(self) -> None:
+        self._score_fn = resolve_metric(self.score_metric_name)
+
+    def is_valid(
+        self, image: np.ndarray, logger_=None
+    ) -> Tuple[bool, Dict[str, Any]]:
+        ok, stats = total_gradient_energy(
+            image, min_gradient_energy=self.min_gradient_energy
+        )
+        stats["strategy"] = self.name
+        if logger_:
+            level = logger_.info if ok else logger_.warning
+            level(
+                "dense_fluorescence: gradient_energy=%.4f vs min=%.4f -> %s",
+                stats["gradient_energy"],
+                self.min_gradient_energy,
+                "VALID" if ok else "below threshold (will PROCEED anyway)",
+            )
+        return ok, stats
+
+    def score(self, image: np.ndarray) -> float:
+        return float(self._score_fn(image))
+
+    def brightness_acceptable(
+        self, image: np.ndarray
+    ) -> Tuple[bool, Dict[str, Any]]:
+        gray = _to_grayscale(image)
+        if gray.max() > 0:
+            gray_8bit = (gray / gray.max() * 255.0).astype(np.float32)
+        else:
+            gray_8bit = gray
+        p99 = float(np.percentile(gray_8bit, 99))
+        ok = p99 >= self.p99_floor
+        return ok, {
+            "strategy": self.name,
+            "brightness_check": "percentile_floor",
+            "p99": p99,
+            "floor": self.p99_floor,
+        }
+
+
+@dataclass
 class ManualOnlyStrategy:
     """Skip auto entirely. Always rejects; the workflow's
     on_failure=MANUAL handler pops the manual focus dialog.
@@ -376,6 +440,7 @@ class ManualOnlyStrategy:
 _STRATEGY_CLASSES = {
     "dense_texture": DenseTextureStrategy,
     "sparse_signal": SparseSignalStrategy,
+    "dense_fluorescence": DenseFluorescenceStrategy,
     "dark_field": DarkFieldStrategy,
     "manual_only": ManualOnlyStrategy,
 }
@@ -458,6 +523,7 @@ def list_strategy_names() -> list[str]:
 __all__ = [
     "AutofocusStrategy",
     "DarkFieldStrategy",
+    "DenseFluorescenceStrategy",
     "DenseTextureStrategy",
     "ManualOnlyStrategy",
     "SparseSignalStrategy",

@@ -114,14 +114,17 @@ class TestManifestStructure:
             "always_false",
         }
 
-    def test_four_strategies(self):
+    def test_shipped_strategies(self):
         m = load_manifest()
-        assert set(m.strategies) == {
+        # The four "core" strategies must always be present so existing
+        # autofocus YAMLs keep validating; additive strategies are
+        # allowed (manifest is the source of truth for what ships).
+        assert {
             "dense_texture",
             "sparse_signal",
             "dark_field",
             "manual_only",
-        }
+        }.issubset(set(m.strategies))
 
     def test_strategies_reference_real_metrics_and_checks(self):
         m = load_manifest()

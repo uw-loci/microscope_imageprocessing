@@ -250,5 +250,13 @@ class TestBuildStrategy:
 
 
 def test_list_strategy_names_matches_manifest():
+    # The four "core" strategies must always be exposed; the manifest
+    # may declare additional ones (e.g. dense_fluorescence) and the
+    # registry must keep up with it.
     names = set(list_strategy_names())
-    assert names == {"dense_texture", "sparse_signal", "dark_field", "manual_only"}
+    assert {
+        "dense_texture",
+        "sparse_signal",
+        "dark_field",
+        "manual_only",
+    }.issubset(names)

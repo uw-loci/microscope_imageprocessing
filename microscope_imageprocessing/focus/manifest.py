@@ -50,6 +50,73 @@ class MetricSpec:
     requires: str  # numpy | scipy | skimage | scipy+skimage
     supported_paths: Tuple[str, ...]  # subset of {streaming, standard, strategy}
     role: Optional[str] = None  # "fallback" for p98_p2; None otherwise
+    # Optional optical-modality restriction. Empty tuple = "any modality".
+    # Canonical buckets: brightfield, ppm, fluorescence, dark_field. Aliases
+    # like 'bf' / 'fl' / 'wf' are normalised by `is_valid_for_modality`.
+    valid_modalities: Tuple[str, ...] = ()
+    # Optional minimum nominal objective magnification at which the
+    # metric is reliable. None = unrestricted. Used for advisory
+    # warnings (the runtime never blocks on this).
+    min_magnification: Optional[float] = None
+
+    def is_valid_for_modality(self, modality: Optional[str]) -> bool:
+        """Whether this metric is appropriate for the given modality.
+
+        True when no restriction is declared, when the caller passes
+        None/'' (cannot infer), or when the canonical form of the
+        modality matches one of the listed entries. Mirrors the Java
+        `MetricSpec.isValidForModality` so both sides agree on which
+        bindings should warn.
+        """
+        if not self.valid_modalities:
+            return True
+        if not modality:
+            return True
+        canon = canonical_modality(modality)
+        return any(canonical_modality(m) == canon for m in self.valid_modalities)
+
+    def is_valid_for_magnification(self, nominal_mag: Optional[float]) -> bool:
+        """Whether the metric is appropriate at the given magnification.
+
+        True when no min is declared or the caller passes None / a
+        non-positive value (unknown).
+        """
+        if self.min_magnification is None:
+            return True
+        if nominal_mag is None or nominal_mag <= 0:
+            return True
+        return nominal_mag >= self.min_magnification
+
+
+def canonical_modality(modality: Optional[str]) -> str:
+    """Reduce a modality string (or alias) to a canonical bucket.
+
+    Mirrors `FocusMetricsManifest.canonicalModality` in the Java
+    loader. Buckets: brightfield, ppm, fluorescence, dark_field, other.
+    Lowercase, prefix-aware. Both sides MUST stay in sync; otherwise
+    the editor and runtime can disagree on which bindings violate a
+    metric's `valid_modalities` declaration.
+    """
+    if modality is None:
+        return "other"
+    s = modality.strip().lower()
+    if not s:
+        return "other"
+    if (s == "brightfield" or s == "bf" or s.startswith("bf_")
+            or s.startswith("brightfield_") or s == "dia"
+            or s == "transmission" or s == "trans"):
+        return "brightfield"
+    if (s == "ppm" or s.startswith("ppm_") or s == "polarized"
+            or s == "pol" or s == "polarised"):
+        return "ppm"
+    if s in ("dark_field", "darkfield", "df"):
+        return "dark_field"
+    if (s in ("fluorescence", "fluorescent", "fl") or s.startswith("fl_")
+            or s == "widefield" or s == "wf" or s.startswith("wf_")
+            or s == "laser_scanning" or s == "lsm" or s == "confocal"
+            or s == "shg" or s == "multiphoton" or s == "1p" or s == "2p"):
+        return "fluorescence"
+    return s
 
 
 @dataclass(frozen=True)
@@ -105,6 +172,13 @@ class FocusMetricsManifest:
 
 def _parse_metric(entry: Mapping[str, Any]) -> MetricSpec:
     paths = entry.get("supported_paths") or []
+    valid_mods = entry.get("valid_modalities") or []
+    min_mag = entry.get("min_magnification")
+    if min_mag is not None:
+        try:
+            min_mag = float(min_mag)
+        except (TypeError, ValueError):
+            min_mag = None
     return MetricSpec(
         name=entry["name"],
         group=entry.get("group", "advanced"),
@@ -114,6 +188,8 @@ def _parse_metric(entry: Mapping[str, Any]) -> MetricSpec:
         requires=entry.get("requires", "numpy"),
         supported_paths=tuple(paths),
         role=entry.get("role"),
+        valid_modalities=tuple(str(m) for m in valid_mods),
+        min_magnification=min_mag,
     )
 
 
