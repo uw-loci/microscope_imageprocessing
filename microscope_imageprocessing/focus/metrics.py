@@ -48,22 +48,31 @@ logger = logging.getLogger(__name__)
 def _to_gray(image: np.ndarray) -> np.ndarray:
     """Reduce a multi-component frame to a 2D grayscale array.
 
-    For 3D input with >= 3 components: BT.601 luminance
-    Y = 0.299*R + 0.587*G + 0.114*B (standard photographic
-    grayscale). For 2-component 3D input: average of the two
-    channels. For 1-component 3D input (some camera SDKs return
-    ``(H, W, 1)``): squeeze. For 2D input: passthrough. Always
-    promotes to ``float64`` so downstream metric math is exact.
+    Channel-count-driven dispatch:
 
-    PRIOR DESIGN (failed PPM 40x 2026-05-04): green-channel-only
-    reduction missed the focus signal on JAI 3-CCD raw frames of
-    eosin-stained tissue. Eosin's strongest absorption is in the
-    green band, so the GREEN channel sees relatively flat
-    illumination at every Z while the RED channel carries most of
-    the focus-relevant contrast. The user could see histogram
-    change clearly in the live viewer (which displays luminance)
-    but every metric reported only 3-4% modulation across a 5 um
-    scan and the gaussian fit committed Z up to 5 um from truth.
+      - 4 channels: assumed BGRA (JAI 3-CCD prism in 32bitRGB mode,
+        as exposed by Micro-Manager). Bytes are [B, G, R, A]; alpha
+        is dropped. BT.601 luminance applied with R = arr[:,:,2],
+        G = arr[:,:,1], B = arr[:,:,0].
+      - 3 channels: assumed RGB (post-debayer or post-reorder).
+        Standard BT.601 with R = arr[:,:,0], G = arr[:,:,1],
+        B = arr[:,:,2].
+      - 2 channels: simple average.
+      - 1 channel (3D): squeeze.
+      - 2D: passthrough.
+
+    Always promotes to ``float64`` so downstream metric math is exact.
+
+    PRIOR DESIGN (failed PPM 40x 2026-05-04, two-stage):
+      Stage 1: green-channel-only reduction missed focus signal on
+      JAI raw frames of eosin-stained tissue. Eosin absorbs strongly
+      in green, so the GREEN channel sees relatively flat illumination
+      at every Z while RED carries the focus-relevant contrast. Stage
+      2: replaced with BT.601 RGB but the streaming AF path reads JAI
+      data as 4-channel BGRA (bypassing the camera adapter's BGRA->RGB
+      reorder), so the BT.601 weights ended up as 0.299*B + 0.587*G +
+      0.114*R -- R got the SMALLEST weight, doubling down on the
+      original problem.
     """
     if image is None:
         return np.empty((0, 0), dtype=np.float64)
@@ -72,6 +81,11 @@ def _to_gray(image: np.ndarray) -> np.ndarray:
         return arr.astype(np.float64, copy=False)
     if arr.ndim == 3:
         nch = arr.shape[2]
+        if nch == 4:
+            arr_f = arr.astype(np.float64, copy=False)
+            return (0.299 * arr_f[:, :, 2]
+                    + 0.587 * arr_f[:, :, 1]
+                    + 0.114 * arr_f[:, :, 0])
         if nch >= 3:
             arr_f = arr.astype(np.float64, copy=False)
             return (0.299 * arr_f[:, :, 0]
