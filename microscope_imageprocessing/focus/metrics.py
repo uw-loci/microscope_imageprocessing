@@ -48,31 +48,38 @@ logger = logging.getLogger(__name__)
 def _to_gray(image: np.ndarray) -> np.ndarray:
     """Reduce a multi-component frame to a 2D grayscale array.
 
-    Channel-count-driven dispatch:
+    Equal-weighted mean across colour channels (alpha dropped):
 
-      - 4 channels: assumed BGRA (JAI 3-CCD prism in 32bitRGB mode,
-        as exposed by Micro-Manager). Bytes are [B, G, R, A]; alpha
-        is dropped. BT.601 luminance applied with R = arr[:,:,2],
-        G = arr[:,:,1], B = arr[:,:,0].
-      - 3 channels: assumed RGB (post-debayer or post-reorder).
-        Standard BT.601 with R = arr[:,:,0], G = arr[:,:,1],
-        B = arr[:,:,2].
-      - 2 channels: simple average.
+      - 4 channels (JAI 3-CCD BGRA from Micro-Manager): mean of B, G, R.
+        Alpha (channel 3) is dropped.
+      - 3 channels (RGB after debayer / camera-adapter reorder): mean
+        of R, G, B.
+      - 2 channels: mean of the two.
       - 1 channel (3D): squeeze.
       - 2D: passthrough.
 
-    Always promotes to ``float64`` so downstream metric math is exact.
+    Promotes to ``float64`` so downstream metric math is exact.
 
-    PRIOR DESIGN (failed PPM 40x 2026-05-04, two-stage):
-      Stage 1: green-channel-only reduction missed focus signal on
-      JAI raw frames of eosin-stained tissue. Eosin absorbs strongly
-      in green, so the GREEN channel sees relatively flat illumination
-      at every Z while RED carries the focus-relevant contrast. Stage
-      2: replaced with BT.601 RGB but the streaming AF path reads JAI
-      data as 4-channel BGRA (bypassing the camera adapter's BGRA->RGB
-      reorder), so the BT.601 weights ended up as 0.299*B + 0.587*G +
-      0.114*R -- R got the SMALLEST weight, doubling down on the
-      original problem.
+    Why equal-mean rather than BT.601 luminance:
+      Standard AF (`hardware.autofocus`) calls
+      ``camera.extract_green_channel`` which is implemented for the JAI
+      3-CCD camera as ``np.mean(img, axis=2)`` -- equal-weighted mean,
+      despite the misleading method name. Streaming AF previously used
+      BT.601 (G=0.587 dominant), and on PPM eosin-stained tissue this
+      let cover-slip / debris features (which contrast best in R)
+      compete with the tissue focus, often winning: standard AF found
+      focus at z=92.32 while streaming AF on the same FOV picked z=83.4
+      (a non-tissue feature). Switching to equal-mean here matches
+      standard AF's empirically-validated reduction so streaming and
+      standard agree on which feature is "focus".
+
+    Earlier failure modes (kept for context):
+      Stage 1 (pre-2026-05-04): green-channel-only -- eosin absorbs in
+      G so the green channel sees flat illumination across Z. Failed.
+      Stage 2 (2026-05-04 BGRA fix attempt): BT.601 with correct R
+      index for BGRA. Made the metric responsive but to the wrong
+      feature on PPM. Replaced with equal-mean (matches the working
+      standard-AF path).
     """
     if image is None:
         return np.empty((0, 0), dtype=np.float64)
@@ -81,16 +88,13 @@ def _to_gray(image: np.ndarray) -> np.ndarray:
         return arr.astype(np.float64, copy=False)
     if arr.ndim == 3:
         nch = arr.shape[2]
-        if nch == 4:
+        if nch >= 4:
+            # BGRA: drop alpha (last channel), equal-weight B/G/R.
             arr_f = arr.astype(np.float64, copy=False)
-            return (0.299 * arr_f[:, :, 2]
-                    + 0.587 * arr_f[:, :, 1]
-                    + 0.114 * arr_f[:, :, 0])
-        if nch >= 3:
+            return (arr_f[:, :, 0] + arr_f[:, :, 1] + arr_f[:, :, 2]) / 3.0
+        if nch == 3:
             arr_f = arr.astype(np.float64, copy=False)
-            return (0.299 * arr_f[:, :, 0]
-                    + 0.587 * arr_f[:, :, 1]
-                    + 0.114 * arr_f[:, :, 2])
+            return (arr_f[:, :, 0] + arr_f[:, :, 1] + arr_f[:, :, 2]) / 3.0
         if nch == 2:
             arr_f = arr.astype(np.float64, copy=False)
             return 0.5 * (arr_f[:, :, 0] + arr_f[:, :, 1])
