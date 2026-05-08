@@ -17,6 +17,7 @@ The packaged copy is bundled at install time so tests and dev work
 without a configurations checkout. It is regenerated from the canonical
 file in CI; do not edit the packaged copy by hand.
 """
+
 from __future__ import annotations
 
 import logging
@@ -102,19 +103,34 @@ def canonical_modality(modality: Optional[str]) -> str:
     s = modality.strip().lower()
     if not s:
         return "other"
-    if (s == "brightfield" or s == "bf" or s.startswith("bf_")
-            or s.startswith("brightfield_") or s == "dia"
-            or s == "transmission" or s == "trans"):
+    if (
+        s == "brightfield"
+        or s == "bf"
+        or s.startswith("bf_")
+        or s.startswith("brightfield_")
+        or s == "dia"
+        or s == "transmission"
+        or s == "trans"
+    ):
         return "brightfield"
-    if (s == "ppm" or s.startswith("ppm_") or s == "polarized"
-            or s == "pol" or s == "polarised"):
+    if s == "ppm" or s.startswith("ppm_") or s == "polarized" or s == "pol" or s == "polarised":
         return "ppm"
     if s in ("dark_field", "darkfield", "df"):
         return "dark_field"
-    if (s in ("fluorescence", "fluorescent", "fl") or s.startswith("fl_")
-            or s == "widefield" or s == "wf" or s.startswith("wf_")
-            or s == "laser_scanning" or s == "lsm" or s == "confocal"
-            or s == "shg" or s == "multiphoton" or s == "1p" or s == "2p"):
+    if (
+        s in ("fluorescence", "fluorescent", "fl")
+        or s.startswith("fl_")
+        or s == "widefield"
+        or s == "wf"
+        or s.startswith("wf_")
+        or s == "laser_scanning"
+        or s == "lsm"
+        or s == "confocal"
+        or s == "shg"
+        or s == "multiphoton"
+        or s == "1p"
+        or s == "2p"
+    ):
         return "fluorescence"
     return s
 
@@ -307,7 +323,9 @@ def load_manifest(config_dir: Optional[Path] = None) -> FocusMetricsManifest:
         manifest = _parse_manifest(doc, source_path=path)
         logger.debug(
             "Loaded focus manifest from %s (%d metrics, %d strategies)",
-            path, len(manifest.metrics), len(manifest.strategies),
+            path,
+            len(manifest.metrics),
+            len(manifest.strategies),
         )
         return manifest
 

@@ -64,9 +64,7 @@ class TestOmeTiffWriterIsStackWriterAlias:
     """
 
     @staticmethod
-    def _direct_stack_writer_equivalent(
-        path, pixel_size_um, data, compression=None
-    ):
+    def _direct_stack_writer_equivalent(path, pixel_size_um, data, compression=None):
         """Direct StackWriter call matching the 2D adapter's construction."""
         arr = np.asarray(data)
         if arr.ndim == 3 and arr.shape[-1] == 3:
@@ -113,14 +111,12 @@ class TestOmeTiffWriterIsStackWriterAlias:
             p_adapter = Path(tmp) / "adapter.tif"
             p_direct = Path(tmp) / "direct.tif"
             ome_tiff_writer(str(p_adapter), pixel_size_um=0.5, data=data)
-            self._direct_stack_writer_equivalent(
-                str(p_direct), pixel_size_um=0.5, data=data
-            )
+            self._direct_stack_writer_equivalent(str(p_direct), pixel_size_um=0.5, data=data)
             sha_adapter = hashlib.sha256(p_adapter.read_bytes()).hexdigest()
             sha_direct = hashlib.sha256(p_direct.read_bytes()).hexdigest()
-            assert sha_adapter == sha_direct, (
-                f"adapter SHA {sha_adapter} != direct SHA {sha_direct}"
-            )
+            assert (
+                sha_adapter == sha_direct
+            ), f"adapter SHA {sha_adapter} != direct SHA {sha_direct}"
 
     def test_byte_identical_with_compression(self):
         data = np.random.RandomState(4).randint(0, 255, (32, 48, 3), dtype=np.uint8)

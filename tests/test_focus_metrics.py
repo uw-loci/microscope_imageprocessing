@@ -17,6 +17,7 @@ Numeric stability and absolute scores are not tested -- callers
 compare scores within a single sweep, so absolute values are not part
 of the contract.
 """
+
 from __future__ import annotations
 
 import math
@@ -43,6 +44,7 @@ def _reset_cache():
 
 # --------------------------------------------------------------- fixtures
 
+
 @pytest.fixture
 def sharp_image() -> np.ndarray:
     """A vertical sharp edge: left half 0, right half 1000.
@@ -68,12 +70,13 @@ def blurred_image() -> np.ndarray:
 
 # ---------------------------------------------------- manifest <-> code
 
+
 class TestManifestImplementationParity:
     def test_every_manifest_metric_has_implementation(self):
         for name in list_metric_names():
-            assert name in metrics_module._IMPLEMENTATIONS, (
-                f"Manifest metric {name!r} has no implementation in metrics._IMPLEMENTATIONS."
-            )
+            assert (
+                name in metrics_module._IMPLEMENTATIONS
+            ), f"Manifest metric {name!r} has no implementation in metrics._IMPLEMENTATIONS."
 
     def test_every_implementation_is_in_manifest(self):
         manifest_names = set(list_metric_names())
@@ -92,6 +95,7 @@ class TestManifestImplementationParity:
 
 
 # ----------------------------------------------------- dispatcher behavior
+
 
 class TestResolveMetric:
     def test_returns_callable_for_each_canonical_name(self):
@@ -145,7 +149,8 @@ class TestResolveMetric:
 # zero weight everywhere. It needs its own textured fixture below.
 
 _BASIC_FOCUSING_METRICS = [
-    name for name in metrics_module._IMPLEMENTATIONS
+    name
+    for name in metrics_module._IMPLEMENTATIONS
     if name not in ("none", "hybrid_sharpness_metric")
 ]
 
@@ -170,6 +175,7 @@ def test_hybrid_sharpness_favours_sharp_over_blurred():
     # for the soft mask, and high spatial frequency that disappears
     # when blurred.
     from scipy.ndimage import gaussian_filter
+
     rng = np.random.default_rng(0)
     sharp = rng.uniform(300.0, 700.0, size=(128, 128))
     blurred = gaussian_filter(sharp, sigma=4.0)
@@ -188,6 +194,7 @@ def test_none_is_constant():
 
 
 # ------------------------------------------------- modality dispatch
+
 
 class TestModalityDefault:
     def test_brightfield_resolves_to_tenengrad(self):
@@ -211,6 +218,7 @@ class TestModalityDefault:
 
 
 # ----------------------------------------------- behavioural sanity
+
 
 def test_list_metric_names_includes_canonicals():
     names = list_metric_names()

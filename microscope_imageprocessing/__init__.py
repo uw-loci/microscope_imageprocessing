@@ -15,6 +15,7 @@ any microscopy workflow.
 
 try:
     from importlib.metadata import version as _get_version
+
     __version__ = _get_version("microscope-imageprocessing")
 except Exception:
     __version__ = "0.1.0.dev"

@@ -22,12 +22,16 @@ def bayer_rggb_uint16():
     h, w = 64, 64
     img = np.zeros((h, w), dtype=np.uint16)
     # Red pixels (even row, even col) -- ramp from 1000 to 40000
-    img[0::2, 0::2] = np.linspace(1000, 40000, (h // 2) * (w // 2)).reshape(h // 2, w // 2).astype(np.uint16)
+    img[0::2, 0::2] = (
+        np.linspace(1000, 40000, (h // 2) * (w // 2)).reshape(h // 2, w // 2).astype(np.uint16)
+    )
     # Green pixels (even row odd col + odd row even col)
     img[0::2, 1::2] = 20000
     img[1::2, 0::2] = 20000
     # Blue pixels (odd row, odd col) -- ramp inverted
-    img[1::2, 1::2] = np.linspace(40000, 1000, (h // 2) * (w // 2)).reshape(h // 2, w // 2).astype(np.uint16)
+    img[1::2, 1::2] = (
+        np.linspace(40000, 1000, (h // 2) * (w // 2)).reshape(h // 2, w // 2).astype(np.uint16)
+    )
     return img
 
 
@@ -39,7 +43,7 @@ def bayer_rggb_uint8():
     img[0::2, 0::2] = 200  # R
     img[0::2, 1::2] = 128  # G1
     img[1::2, 0::2] = 128  # G2
-    img[1::2, 1::2] = 80   # B
+    img[1::2, 1::2] = 80  # B
     return img
 
 
@@ -78,6 +82,7 @@ def z_stack_uint16():
         # Gaussian blur increases away from center plane
         sigma = abs(i - 2) * 2.0 + 0.5
         from scipy.ndimage import gaussian_filter
+
         sharp = np.random.RandomState(42).randint(0, 60000, (32, 32), dtype=np.uint16)
         blurred = gaussian_filter(sharp.astype(np.float64), sigma=sigma)
         stack.append(np.clip(blurred, 0, 65535).astype(np.uint16))

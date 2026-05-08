@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 # Z-stack projection operators
 # ============================================================
 
+
 def max_intensity_projection(stack: List[np.ndarray]) -> np.ndarray:
     """Maximum intensity projection across Z planes.
 
@@ -109,8 +110,7 @@ def get_projection(name: str) -> Callable[[List[np.ndarray]], np.ndarray]:
     """
     if name not in PROJECTIONS:
         raise KeyError(
-            f"Unknown projection '{name}'. "
-            f"Available: {', '.join(sorted(PROJECTIONS.keys()))}"
+            f"Unknown projection '{name}'. " f"Available: {', '.join(sorted(PROJECTIONS.keys()))}"
         )
     return PROJECTIONS[name]
 
@@ -140,6 +140,7 @@ def generate_z_offsets(z_range_um: float, z_step_um: float) -> List[float]:
     if not offsets:
         return [0.0]
 
-    logger.debug("Z-stack offsets: %d planes over +/-%.1f um (step=%.1f)",
-                 len(offsets), half, z_step_um)
+    logger.debug(
+        "Z-stack offsets: %d planes over +/-%.1f um (step=%.1f)", len(offsets), half, z_step_um
+    )
     return offsets

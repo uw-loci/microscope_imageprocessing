@@ -32,6 +32,7 @@ Failure modes (what to do when validity returns False):
   dark_field where the gate is conservative.
 - MANUAL: pop the manual focus dialog immediately. Used by manual_only.
 """
+
 from __future__ import annotations
 
 import enum
@@ -92,9 +93,7 @@ class AutofocusStrategy(Protocol):
         """Focus score (higher = sharper)."""
         ...
 
-    def brightness_acceptable(
-        self, image: np.ndarray
-    ) -> Tuple[bool, Dict[str, Any]]:
+    def brightness_acceptable(self, image: np.ndarray) -> Tuple[bool, Dict[str, Any]]:
         """Returns (ok, stats). Per-strategy so sparse strategies can use
         a percentile/dynamic-range check instead of a median floor."""
         ...
@@ -129,9 +128,7 @@ class DenseTextureStrategy:
     def __post_init__(self) -> None:
         self._score_fn = resolve_metric(self.score_metric_name)
 
-    def is_valid(
-        self, image: np.ndarray, logger_=None
-    ) -> Tuple[bool, Dict[str, Any]]:
+    def is_valid(self, image: np.ndarray, logger_=None) -> Tuple[bool, Dict[str, Any]]:
         ok, stats = texture_and_area(
             image,
             texture_threshold=self.texture_threshold,
@@ -143,18 +140,18 @@ class DenseTextureStrategy:
         stats["strategy"] = self.name
         if logger_:
             level = logger_.info if ok else logger_.warning
-            level("dense_texture: %s (texture=%.4f, area=%.3f)",
-                  "VALID" if ok else "rejected",
-                  stats.get("texture", 0.0),
-                  stats.get("area", 0.0))
+            level(
+                "dense_texture: %s (texture=%.4f, area=%.3f)",
+                "VALID" if ok else "rejected",
+                stats.get("texture", 0.0),
+                stats.get("area", 0.0),
+            )
         return ok, stats
 
     def score(self, image: np.ndarray) -> float:
         return float(self._score_fn(image))
 
-    def brightness_acceptable(
-        self, image: np.ndarray
-    ) -> Tuple[bool, Dict[str, Any]]:
+    def brightness_acceptable(self, image: np.ndarray) -> Tuple[bool, Dict[str, Any]]:
         gray = _to_grayscale(image)
         if gray.max() > 0:
             gray_8bit = (gray / gray.max() * 255.0).astype(np.float32)
@@ -212,9 +209,7 @@ class SparseSignalStrategy:
         """
         gray = _to_grayscale(image)
         if gray.max() > gray.min():
-            gray_8bit = (
-                (gray - gray.min()) / (gray.max() - gray.min()) * 255.0
-            ).astype(np.float32)
+            gray_8bit = ((gray - gray.min()) / (gray.max() - gray.min()) * 255.0).astype(np.float32)
         else:
             gray_8bit = gray.astype(np.float32)
         bg_median = float(np.median(gray_8bit))
@@ -226,9 +221,7 @@ class SparseSignalStrategy:
         )
         return gray_8bit > spot_threshold
 
-    def is_valid(
-        self, image: np.ndarray, logger_=None
-    ) -> Tuple[bool, Dict[str, Any]]:
+    def is_valid(self, image: np.ndarray, logger_=None) -> Tuple[bool, Dict[str, Any]]:
         ok, stats = bright_spot_count(
             image,
             spot_sigma_above_bg=self.spot_sigma_above_bg,
@@ -262,9 +255,7 @@ class SparseSignalStrategy:
         masked = np.where(fg_mask, gray, 0.0)
         return float(self._score_fn(masked))
 
-    def brightness_acceptable(
-        self, image: np.ndarray
-    ) -> Tuple[bool, Dict[str, Any]]:
+    def brightness_acceptable(self, image: np.ndarray) -> Tuple[bool, Dict[str, Any]]:
         gray = _to_grayscale(image)
         max_val = float(gray.max())
         min_val = float(gray.min())
@@ -304,12 +295,8 @@ class DarkFieldStrategy:
     def __post_init__(self) -> None:
         self._score_fn = resolve_metric(self.score_metric_name)
 
-    def is_valid(
-        self, image: np.ndarray, logger_=None
-    ) -> Tuple[bool, Dict[str, Any]]:
-        ok, stats = total_gradient_energy(
-            image, min_gradient_energy=self.min_gradient_energy
-        )
+    def is_valid(self, image: np.ndarray, logger_=None) -> Tuple[bool, Dict[str, Any]]:
+        ok, stats = total_gradient_energy(image, min_gradient_energy=self.min_gradient_energy)
         stats["strategy"] = self.name
         if logger_:
             level = logger_.info if ok else logger_.warning
@@ -324,9 +311,7 @@ class DarkFieldStrategy:
     def score(self, image: np.ndarray) -> float:
         return float(self._score_fn(image))
 
-    def brightness_acceptable(
-        self, image: np.ndarray
-    ) -> Tuple[bool, Dict[str, Any]]:
+    def brightness_acceptable(self, image: np.ndarray) -> Tuple[bool, Dict[str, Any]]:
         gray = _to_grayscale(image)
         if gray.max() > 0:
             gray_8bit = (gray / gray.max() * 255.0).astype(np.float32)
@@ -368,12 +353,8 @@ class DenseFluorescenceStrategy:
     def __post_init__(self) -> None:
         self._score_fn = resolve_metric(self.score_metric_name)
 
-    def is_valid(
-        self, image: np.ndarray, logger_=None
-    ) -> Tuple[bool, Dict[str, Any]]:
-        ok, stats = total_gradient_energy(
-            image, min_gradient_energy=self.min_gradient_energy
-        )
+    def is_valid(self, image: np.ndarray, logger_=None) -> Tuple[bool, Dict[str, Any]]:
+        ok, stats = total_gradient_energy(image, min_gradient_energy=self.min_gradient_energy)
         stats["strategy"] = self.name
         if logger_:
             level = logger_.info if ok else logger_.warning
@@ -388,9 +369,7 @@ class DenseFluorescenceStrategy:
     def score(self, image: np.ndarray) -> float:
         return float(self._score_fn(image))
 
-    def brightness_acceptable(
-        self, image: np.ndarray
-    ) -> Tuple[bool, Dict[str, Any]]:
+    def brightness_acceptable(self, image: np.ndarray) -> Tuple[bool, Dict[str, Any]]:
         gray = _to_grayscale(image)
         if gray.max() > 0:
             gray_8bit = (gray / gray.max() * 255.0).astype(np.float32)
@@ -418,17 +397,13 @@ class ManualOnlyStrategy:
     name: str = "manual_only"
     on_failure: StrategyFailureMode = StrategyFailureMode.MANUAL
 
-    def is_valid(
-        self, image: np.ndarray, logger_=None
-    ) -> Tuple[bool, Dict[str, Any]]:
+    def is_valid(self, image: np.ndarray, logger_=None) -> Tuple[bool, Dict[str, Any]]:
         return False, {"strategy": self.name, "validity_check": "always_false"}
 
     def score(self, image: np.ndarray) -> float:
         return 0.0
 
-    def brightness_acceptable(
-        self, image: np.ndarray
-    ) -> Tuple[bool, Dict[str, Any]]:
+    def brightness_acceptable(self, image: np.ndarray) -> Tuple[bool, Dict[str, Any]]:
         return True, {"strategy": self.name, "brightness_check": "none"}
 
 
@@ -500,8 +475,7 @@ def build_strategy(
             instance.on_failure = StrategyFailureMode(params["on_failure"])
         except ValueError:
             logger.warning(
-                "Strategy '%s' YAML had invalid on_failure '%s'; "
-                "keeping default %s",
+                "Strategy '%s' YAML had invalid on_failure '%s'; " "keeping default %s",
                 strategy_name,
                 params["on_failure"],
                 instance.on_failure.value,
@@ -515,6 +489,7 @@ def list_strategy_names() -> list[str]:
     the runtime registry against the manifest at call time so a future
     drift surfaces in the test suite, not at runtime."""
     from microscope_imageprocessing.focus.manifest import get_manifest
+
     return list(get_manifest().strategies)
 
 

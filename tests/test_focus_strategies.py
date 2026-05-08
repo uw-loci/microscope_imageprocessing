@@ -13,6 +13,7 @@ These tests lock in:
   4. **Each strategy delegates to the correct validity + score
      functions** -- the consolidation invariant.
 """
+
 from __future__ import annotations
 
 import logging
@@ -42,22 +43,22 @@ def _reset_cache():
 
 # ---------------------------------------------------- manifest <-> code
 
+
 def test_every_manifest_strategy_has_class():
     for name in list_strategy_names():
-        assert name in strategies_module._STRATEGY_CLASSES, (
-            f"Manifest strategy {name!r} has no class registered."
-        )
+        assert (
+            name in strategies_module._STRATEGY_CLASSES
+        ), f"Manifest strategy {name!r} has no class registered."
 
 
 def test_every_class_is_in_manifest():
     manifest_names = set(list_strategy_names())
     for name in strategies_module._STRATEGY_CLASSES:
-        assert name in manifest_names, (
-            f"Strategy class {name!r} is not declared in the manifest."
-        )
+        assert name in manifest_names, f"Strategy class {name!r} is not declared in the manifest."
 
 
 # ------------------------------------------------- failure mode defaults
+
 
 def test_dense_texture_defers():
     s = DenseTextureStrategy()
@@ -80,6 +81,7 @@ def test_manual_only_pops_dialog():
 
 
 # ------------------------------------------------- delegation invariants
+
 
 class TestDenseTexture:
     def test_is_valid_passes_dense_image(self):
@@ -190,6 +192,7 @@ class TestManualOnly:
 
 # ------------------------------------------------- build_strategy factory
 
+
 class TestBuildStrategy:
     def test_unknown_strategy_falls_back_to_dense_texture(self, caplog):
         with caplog.at_level(logging.WARNING):
@@ -212,9 +215,7 @@ class TestBuildStrategy:
 
     def test_score_metric_renamed_for_constructor(self):
         # YAML key 'score_metric' becomes constructor arg 'score_metric_name'.
-        s = build_strategy(
-            "dense_texture", {"score_metric": "tenengrad"}
-        )
+        s = build_strategy("dense_texture", {"score_metric": "tenengrad"})
         assert s.score_metric_name == "tenengrad"
 
     def test_unknown_params_dropped_with_warning(self, caplog):

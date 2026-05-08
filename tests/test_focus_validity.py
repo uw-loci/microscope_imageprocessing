@@ -13,6 +13,7 @@ tests lock in:
   3. **Stats dict shape.** The stats dict carries the keys callers rely
      on for logging and post-hoc analysis.
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -36,22 +37,24 @@ def _reset_cache():
 
 # ---------------------------------------------------- manifest <-> code
 
+
 class TestManifestImplementationParity:
     def test_every_manifest_check_has_implementation(self):
         for name in list_validity_check_names():
-            assert name in validity_module._IMPLEMENTATIONS, (
-                f"Manifest validity check {name!r} has no implementation."
-            )
+            assert (
+                name in validity_module._IMPLEMENTATIONS
+            ), f"Manifest validity check {name!r} has no implementation."
 
     def test_every_implementation_is_in_manifest(self):
         manifest_names = set(list_validity_check_names())
         for name in validity_module._IMPLEMENTATIONS:
-            assert name in manifest_names, (
-                f"Implementation {name!r} is not declared in the manifest."
-            )
+            assert (
+                name in manifest_names
+            ), f"Implementation {name!r} is not declared in the manifest."
 
 
 # ----------------------------------------------------- dispatcher behavior
+
 
 class TestResolveValidityCheck:
     def test_returns_callable_for_each_canonical_name(self):
@@ -65,6 +68,7 @@ class TestResolveValidityCheck:
 
 
 # ------------------------------------------------- texture_and_area
+
 
 class TestTextureAndArea:
     def test_dense_texture_image_passes(self):
@@ -89,9 +93,7 @@ class TestTextureAndArea:
     def test_rgb_blank_glass_rejected_by_brightness(self):
         # Bright RGB tile (avg 250) hits the rgb_brightness early-rejection.
         img = np.full((128, 128, 3), 250.0, dtype=np.float32)
-        ok, stats = validity_module.texture_and_area(
-            img, rgb_brightness_threshold=240.0
-        )
+        ok, stats = validity_module.texture_and_area(img, rgb_brightness_threshold=240.0)
         assert ok is False
         assert stats.get("rejected_reason") == "rgb_brightness"
         assert stats["avg_brightness"] >= 240.0
@@ -103,12 +105,8 @@ class TestTextureAndArea:
         # for an unrealistically strict one.
         rng = np.random.default_rng(1)
         img = rng.uniform(50, 200, size=(128, 128)).astype(np.float32)
-        ok_strict, stats_strict = validity_module.texture_and_area(
-            img, texture_threshold=10.0
-        )
-        ok_loose, stats_loose = validity_module.texture_and_area(
-            img, texture_threshold=0.001
-        )
+        ok_strict, stats_strict = validity_module.texture_and_area(img, texture_threshold=10.0)
+        ok_loose, stats_loose = validity_module.texture_and_area(img, texture_threshold=0.001)
         assert ok_strict is False
         assert stats_strict["sufficient_texture"] is False
         assert ok_loose is True
@@ -128,6 +126,7 @@ class TestTextureAndArea:
 
 
 # ------------------------------------------------- bright_spot_count
+
 
 class TestBrightSpotCount:
     def _sparse_spots_image(self, n_spots: int = 5) -> np.ndarray:
@@ -168,6 +167,7 @@ class TestBrightSpotCount:
 
 # ------------------------------------------------- total_gradient_energy
 
+
 class TestTotalGradientEnergy:
     def test_textured_image_passes(self):
         rng = np.random.default_rng(0)
@@ -180,9 +180,7 @@ class TestTotalGradientEnergy:
         # Linear gradient has very low gradient energy after normalization.
         y, x = np.mgrid[0:64, 0:64]
         img = (x + y).astype(np.float32)
-        ok, stats = validity_module.total_gradient_energy(
-            img, min_gradient_energy=0.1
-        )
+        ok, stats = validity_module.total_gradient_energy(img, min_gradient_energy=0.1)
         assert ok is False
         assert stats["gradient_energy"] < 0.1
 
@@ -194,6 +192,7 @@ class TestTotalGradientEnergy:
 
 
 # ------------------------------------------------------------- always_false
+
 
 class TestAlwaysFalse:
     def test_returns_false_regardless_of_input(self):
@@ -209,6 +208,7 @@ class TestAlwaysFalse:
 
 
 # ------------------------------------------------- behavioural sanity
+
 
 def test_list_validity_check_names_includes_canonicals():
     names = list_validity_check_names()

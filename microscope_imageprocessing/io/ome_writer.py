@@ -107,13 +107,10 @@ class StackWriter:
                 f"(got T={size_t}, Z={size_z}, C={size_c})"
             )
         if size_y < 1 or size_x < 1:
-            raise ValueError(
-                f"size_y and size_x must be >= 1 (got Y={size_y}, X={size_x})"
-            )
+            raise ValueError(f"size_y and size_x must be >= 1 (got Y={size_y}, X={size_x})")
         if len(channel_names) != size_c:
             raise ValueError(
-                f"channel_names length {len(channel_names)} does not match "
-                f"size_c {size_c}"
+                f"channel_names length {len(channel_names)} does not match " f"size_c {size_c}"
             )
         if granularity not in _VALID_GRANULARITIES:
             raise ValueError(
@@ -129,9 +126,7 @@ class StackWriter:
         self.dtype = np.dtype(dtype)
         self.pixel_size_um = float(pixel_size_um)
         self.z_step_um = float(z_step_um) if z_step_um is not None else None
-        self.time_increment_s = (
-            float(time_increment_s) if time_increment_s is not None else None
-        )
+        self.time_increment_s = float(time_increment_s) if time_increment_s is not None else None
         self.channel_names: List[str] = list(channel_names)
         self.channel_metadata: List[Dict[str, Any]] = (
             [dict(m) for m in channel_metadata]
@@ -278,9 +273,7 @@ class StackWriter:
     def _finalize(self, *, aborted: bool) -> None:
         eff_t, eff_z, eff_c = self._effective_dims()
         if aborted and not self._frames:
-            logger.info(
-                "StackWriter.abort() called with no frames written; skipping file write"
-            )
+            logger.info("StackWriter.abort() called with no frames written; skipping file write")
             return
 
         if self.granularity == _GRANULARITY_SINGLE:
@@ -431,11 +424,7 @@ class StackWriter:
             if f is not None:
                 sample_frame = f
                 break
-        is_rgb = (
-            sample_frame is not None
-            and sample_frame.ndim == 3
-            and sample_frame.shape[-1] == 3
-        )
+        is_rgb = sample_frame is not None and sample_frame.ndim == 3 and sample_frame.shape[-1] == 3
 
         # Build the OME-XML with explicit Plane elements. _build_ome_xml
         # iterates in (t-outer, c-middle, z-inner) order, which matches the
@@ -554,9 +543,7 @@ class StackWriter:
                     for local_z in range(size_z_in_file):
                         frame = self._frames.get((global_t, local_z, global_c))
                         if frame is None:
-                            frame = np.zeros(
-                                (self.size_y, self.size_x), dtype=self.dtype
-                            )
+                            frame = np.zeros((self.size_y, self.size_x), dtype=self.dtype)
                         per_plane_opts = dict(options)
                         if plane_idx == 0:
                             per_plane_opts["description"] = self.description_override
@@ -643,16 +630,14 @@ class StackWriter:
         for local_idx, c_idx in enumerate(channel_range):
             chan_attrs = {
                 "ID": f"Channel:{file_index}:{local_idx}",
-                "Name": self.channel_names[c_idx]
-                if c_idx < len(self.channel_names)
-                else f"Channel {c_idx}",
+                "Name": (
+                    self.channel_names[c_idx]
+                    if c_idx < len(self.channel_names)
+                    else f"Channel {c_idx}"
+                ),
                 "SamplesPerPixel": "1",
             }
-            meta = (
-                self.channel_metadata[c_idx]
-                if c_idx < len(self.channel_metadata)
-                else {}
-            )
+            meta = self.channel_metadata[c_idx] if c_idx < len(self.channel_metadata) else {}
             for xml_attr, meta_key in (
                 ("ExcitationWavelength", "excitation_nm"),
                 ("EmissionWavelength", "emission_nm"),

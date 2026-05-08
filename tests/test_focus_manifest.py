@@ -1,4 +1,5 @@
 """Tests for the focus_metrics_manifest.yml loader."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -7,14 +8,10 @@ import pytest
 
 from microscope_imageprocessing.focus import (
     FocusMetricsManifest,
-    MetricSpec,
-    StrategySpec,
-    ValidityCheckSpec,
     clear_cache,
     get_manifest,
     load_manifest,
 )
-from microscope_imageprocessing.focus import manifest as manifest_module
 
 
 @pytest.fixture(autouse=True)
@@ -88,7 +85,9 @@ class TestManifestStructure:
         # tenengrad must be available everywhere -- it's the recommended
         # default for tissue.
         assert set(m.metrics["tenengrad"].supported_paths) == {
-            "streaming", "standard", "strategy",
+            "streaming",
+            "standard",
+            "strategy",
         }
 
     def test_removed_aliases_are_documented(self):
@@ -101,9 +100,7 @@ class TestManifestStructure:
     def test_alias_targets_exist_as_metrics(self):
         m = load_manifest()
         for old, new in m.removed_aliases.items():
-            assert new in m.metrics, (
-                f"Alias {old!r} targets {new!r} which is not a real metric."
-            )
+            assert new in m.metrics, f"Alias {old!r} targets {new!r} which is not a real metric."
 
     def test_four_validity_checks(self):
         m = load_manifest()
@@ -194,7 +191,9 @@ class TestRefuseInvalidManifests:
         return tmp_path
 
     def test_strategy_referencing_unknown_metric_rejected(self, tmp_path):
-        cfg = self._write(tmp_path, """
+        cfg = self._write(
+            tmp_path,
+            """
 schema_version: 1
 metrics:
   - name: tenengrad
@@ -212,12 +211,15 @@ strategies:
     score_metric_default: not_a_real_metric
     validity_check: always_false
     on_failure: defer
-""")
+""",
+        )
         with pytest.raises(ValueError, match="not_a_real_metric"):
             load_manifest(config_dir=cfg)
 
     def test_strategy_referencing_unknown_validity_check_rejected(self, tmp_path):
-        cfg = self._write(tmp_path, """
+        cfg = self._write(
+            tmp_path,
+            """
 schema_version: 1
 metrics:
   - name: tenengrad
@@ -235,12 +237,15 @@ strategies:
     score_metric_default: tenengrad
     validity_check: not_a_real_check
     on_failure: defer
-""")
+""",
+        )
         with pytest.raises(ValueError, match="not_a_real_check"):
             load_manifest(config_dir=cfg)
 
     def test_modality_default_pointing_at_unknown_metric_rejected(self, tmp_path):
-        cfg = self._write(tmp_path, """
+        cfg = self._write(
+            tmp_path,
+            """
 schema_version: 1
 metrics:
   - name: tenengrad
@@ -252,14 +257,17 @@ validity_checks: []
 strategies: []
 modality_defaults:
   brightfield: not_a_real_metric
-""")
+""",
+        )
         with pytest.raises(ValueError, match="not_a_real_metric"):
             load_manifest(config_dir=cfg)
 
     def test_alias_and_metric_overlap_rejected(self, tmp_path):
         # If 'tenengrad' is BOTH a current metric AND a removed alias,
         # the loader's behaviour would be ambiguous. Refuse.
-        cfg = self._write(tmp_path, """
+        cfg = self._write(
+            tmp_path,
+            """
 schema_version: 1
 metrics:
   - name: tenengrad
@@ -271,7 +279,8 @@ validity_checks: []
 strategies: []
 removed_aliases:
   tenengrad: laplacian_variance
-""")
+""",
+        )
         with pytest.raises(ValueError, match="metrics and removed_aliases"):
             load_manifest(config_dir=cfg)
 

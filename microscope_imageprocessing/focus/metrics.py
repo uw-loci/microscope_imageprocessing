@@ -28,6 +28,7 @@ incarnations:
     streaming AF code path's dependency set, but skimage is already a
     dependency of microscope_imageprocessing.
 """
+
 from __future__ import annotations
 
 import logging
@@ -44,6 +45,7 @@ logger = logging.getLogger(__name__)
 
 
 # --------------------------------------------------------------- helpers
+
 
 def _to_gray(image: np.ndarray) -> np.ndarray:
     """Reduce a multi-component frame to a 2D grayscale array.
@@ -103,6 +105,7 @@ def _to_gray(image: np.ndarray) -> np.ndarray:
 
 
 # ---------------------------------------------------------- numpy-only
+
 
 def _normalized_variance(gray: np.ndarray) -> float:
     """var / mean. Sensitive to focus when the lamp vignette is small
@@ -177,6 +180,7 @@ def _none(gray: np.ndarray) -> float:
 
 # -------------------------------------------------------- scipy-backed
 
+
 def _laplacian_variance(gray: np.ndarray) -> float:
     """Variance of the Laplacian-filtered image (scipy 3x3 stencil).
 
@@ -189,11 +193,13 @@ def _laplacian_variance(gray: np.ndarray) -> float:
     if gray.ndim != 2 or gray.shape[0] < 3 or gray.shape[1] < 3:
         return 0.0
     from scipy.ndimage import laplace
+
     lap = laplace(gray)
     return float(lap.var())
 
 
 # ------------------------------------------------------- skimage-backed
+
 
 def _sobel(gray: np.ndarray) -> float:
     """Variance of the Sobel-filtered image. Edge-energy metric;
@@ -201,6 +207,7 @@ def _sobel(gray: np.ndarray) -> float:
     if gray.ndim != 2 or gray.shape[0] < 3 or gray.shape[1] < 3:
         return 0.0
     from skimage.filters import sobel as skimage_sobel
+
     return float(skimage_sobel(gray).var())
 
 
@@ -216,6 +223,7 @@ def _robust_sharpness_metric(gray: np.ndarray) -> float:
         return 0.0
     from skimage.filters import laplace, median, threshold_otsu
     from skimage.morphology import disk
+
     filtered = median(gray, disk(3))
     lap = laplace(filtered)
     threshold = threshold_otsu(gray)
@@ -236,6 +244,7 @@ def _hybrid_sharpness_metric(gray: np.ndarray) -> float:
     if gray.ndim != 2 or gray.shape[0] < 3 or gray.shape[1] < 3:
         return 0.0
     from skimage.filters import gaussian
+
     smoothed = gaussian(gray, sigma=1.5)
     gy, gx = np.gradient(smoothed.astype(np.float32))
     gradient_magnitude = gx**2 + gy**2
@@ -285,9 +294,7 @@ def resolve_metric(name: str) -> Callable[[np.ndarray], float]:
             f"scripts/migrate_autofocus_yaml.py."
         )
     if name not in manifest.metrics:
-        raise UnknownMetricError(
-            f"Unknown metric '{name}'. Available: {sorted(manifest.metrics)}."
-        )
+        raise UnknownMetricError(f"Unknown metric '{name}'. Available: {sorted(manifest.metrics)}.")
     impl = _IMPLEMENTATIONS.get(name)
     if impl is None:
         raise UnknownMetricError(
@@ -302,6 +309,7 @@ def _wrap_with_preprocessing(
     impl: Callable[[np.ndarray], float],
 ) -> Callable[[np.ndarray], float]:
     """Adapt a 2D-grayscale metric to also accept multi-channel input."""
+
     def metric(image: np.ndarray) -> float:
         gray = _to_gray(image)
         if gray.size == 0:
@@ -311,6 +319,7 @@ def _wrap_with_preprocessing(
         except Exception as e:  # pragma: no cover - defensive
             logger.debug("Focus metric %s raised: %s", impl.__name__, e)
             return 0.0
+
     metric.__name__ = impl.__name__
     metric.__doc__ = impl.__doc__
     return metric

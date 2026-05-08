@@ -42,3 +42,12 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["microscope_imageprocessing"]
+
+[tool.ruff]
+line-length = 100
+extend-select = ["C4", "NPY", "PD", "SIM"]
+ignore = ["E501"]
+
+[tool.black]
+line-length = 100
+target-version = ["py310"]

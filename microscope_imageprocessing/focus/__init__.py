@@ -20,6 +20,7 @@ Public API:
 
 Validity checks and strategy classes are added in later workstreams.
 """
+
 from microscope_imageprocessing.focus.manifest import (
     FocusMetricsManifest,
     MetricSpec,

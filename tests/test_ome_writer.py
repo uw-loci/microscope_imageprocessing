@@ -7,8 +7,6 @@ arrival), and OME-XML correctness.
 ASCII-only per project policy.
 """
 
-import os
-import re
 import tempfile
 from pathlib import Path
 
@@ -148,12 +146,12 @@ class TestMultiDimStack:
             # reader (BioFormats, QuPath, Fiji) gets unambiguous IFD->plane
             # assignment regardless of whether it prefers DimensionOrder
             # inference or per-plane mapping.
-            assert xml.count("<TiffData") == T * Z * C, (
-                f"expected {T * Z * C} TiffData entries, got {xml.count('<TiffData')}"
-            )
-            assert xml.count("<Plane ") == T * Z * C, (
-                f"expected {T * Z * C} Plane entries, got {xml.count('<Plane ')}"
-            )
+            assert (
+                xml.count("<TiffData") == T * Z * C
+            ), f"expected {T * Z * C} TiffData entries, got {xml.count('<TiffData')}"
+            assert (
+                xml.count("<Plane ") == T * Z * C
+            ), f"expected {T * Z * C} Plane entries, got {xml.count('<Plane ')}"
 
             # Verify each plane's value matches its (TheT, TheC, TheZ)
             # assignment. DimensionOrder="XYZCT" means Z fastest among IFDs,
@@ -231,9 +229,7 @@ class TestAbort:
             )
             try:
                 for t in range(5):
-                    w.write_frame(
-                        _frame(8, 8, t + 1, np.uint16), t=t, z=0, c=0
-                    )
+                    w.write_frame(_frame(8, 8, t + 1, np.uint16), t=t, z=0, c=0)
                 w.abort()
             finally:
                 # abort() should be idempotent and safe; close() must no-op.

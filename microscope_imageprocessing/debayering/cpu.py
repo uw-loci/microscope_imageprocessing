@@ -86,9 +86,7 @@ class CPUDebayer:
 
         # Interpolate each channel
         for i, kernel in enumerate([kernels["r"], kernels["g"], kernels["b"]]):
-            rgb[:, :, i] = ndimage.convolve(
-                rgb[:, :, i], kernel, mode=self.convolution_mode
-            )
+            rgb[:, :, i] = ndimage.convolve(rgb[:, :, i], kernel, mode=self.convolution_mode)
 
         # Restore original values
         rgb[r_y::2, r_x::2, 0] = img[r_y::2, r_x::2]

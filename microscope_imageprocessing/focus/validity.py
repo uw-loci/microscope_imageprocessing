@@ -30,6 +30,7 @@ Implementation choices for checks that previously had multiple incarnations:
     gradient-energy math is consolidated.
   - ``always_false`` -- the trivial check used by manual_only.
 """
+
 from __future__ import annotations
 
 import logging
@@ -51,6 +52,7 @@ ValidityCheckFn = Callable[..., Tuple[bool, Dict[str, Any]]]
 
 # --------------------------------------------------------------- helpers
 
+
 def _to_gray(image: np.ndarray) -> np.ndarray:
     """Reduce an image to a 2D float32 array. RGB averages all channels;
     2D inputs are returned as-is. Float32 (not float64) because validity
@@ -61,6 +63,7 @@ def _to_gray(image: np.ndarray) -> np.ndarray:
 
 
 # ---------------------------------------------------------- texture_and_area
+
 
 def texture_and_area(
     image: np.ndarray,
@@ -144,6 +147,7 @@ def texture_and_area(
 
 # ---------------------------------------------------------- bright_spot_count
 
+
 def bright_spot_count(
     image: np.ndarray,
     spot_sigma_above_bg: float = 5.0,
@@ -172,18 +176,14 @@ def bright_spot_count(
 
     gray = _to_gray(image)
     if gray.max() > gray.min():
-        gray_8bit = (
-            (gray - gray.min()) / (gray.max() - gray.min()) * 255.0
-        ).astype(np.float32)
+        gray_8bit = ((gray - gray.min()) / (gray.max() - gray.min()) * 255.0).astype(np.float32)
     else:
         gray_8bit = gray.astype(np.float32)
 
     bg_median = float(np.median(gray_8bit))
     bg_mad = float(np.median(np.abs(gray_8bit - bg_median))) + 1e-6
     bg_sigma = bg_mad * 1.4826
-    spot_threshold = max(
-        bg_median + spot_sigma_above_bg * bg_sigma, min_peak_intensity
-    )
+    spot_threshold = max(bg_median + spot_sigma_above_bg * bg_sigma, min_peak_intensity)
 
     fg_mask = gray_8bit > spot_threshold
     if not np.any(fg_mask):
@@ -209,6 +209,7 @@ def bright_spot_count(
 
 
 # ---------------------------------------------------- total_gradient_energy
+
 
 def total_gradient_energy(
     image: np.ndarray,
@@ -244,6 +245,7 @@ def total_gradient_energy(
 
 # ------------------------------------------------------------- always_false
 
+
 def always_false(image: np.ndarray, **_unused: Any) -> Tuple[bool, Dict[str, Any]]:
     """Trivial check that always rejects. Used by manual_only so the
     workflow's on_failure=MANUAL handler always pops the manual focus
@@ -273,8 +275,7 @@ def resolve_validity_check(name: str) -> ValidityCheckFn:
     manifest = get_manifest()
     if name not in manifest.validity_checks:
         raise UnknownMetricError(
-            f"Unknown validity check '{name}'. "
-            f"Available: {sorted(manifest.validity_checks)}."
+            f"Unknown validity check '{name}'. " f"Available: {sorted(manifest.validity_checks)}."
         )
     impl = _IMPLEMENTATIONS.get(name)
     if impl is None:
