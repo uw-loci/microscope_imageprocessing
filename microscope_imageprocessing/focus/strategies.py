@@ -53,6 +53,49 @@ from microscope_imageprocessing.focus.validity import (
 logger = logging.getLogger(__name__)
 
 
+def worst_channel_saturation_fraction(image: np.ndarray) -> float:
+    """Fraction (0-1) of pixels saturated in the single worst channel.
+
+    Saturation corrupts focus metrics: clipped highlights flatten the local
+    gradient and can invert the focus curve so it ramps toward defocus
+    instead of peaking at focus (the 2026-05-31 PPM 40x runaway). This
+    measures the most-saturated channel so the AF auto-exposure reducer can
+    drop exposure / illumination until the strongest channel is back under a
+    per-strategy tolerance.
+
+    Per-channel for RGB (H,W,>=3); whole-frame for monochrome (H,W). Uses a
+    dtype-aware near-saturation level (uint8 / 0-255 float: 250, uint16:
+    64000, 0-1 float: 0.98). Returns 0.0 for empty / None images.
+    """
+    if image is None or getattr(image, "size", 0) == 0:
+        return 0.0
+    if image.dtype == np.uint16:
+        sat_level = 64000.0
+    elif np.issubdtype(image.dtype, np.floating) and float(image.max()) <= 1.0:
+        sat_level = 0.98
+    else:
+        sat_level = 250.0  # uint8 and 0-255 float
+    if image.ndim == 2:
+        return float(np.mean(image >= sat_level))
+    if image.ndim == 3 and image.shape[2] >= 1:
+        worst = 0.0
+        for c in range(min(3, image.shape[2])):
+            worst = max(worst, float(np.mean(image[:, :, c] >= sat_level)))
+        return worst
+    return 0.0
+
+
+def _eval_saturation(name: str, threshold: float, image: np.ndarray) -> Tuple[bool, Dict[str, Any]]:
+    """Shared saturation_acceptable body. (ok, stats); ok=False means the
+    brightest channel exceeds this strategy's saturation tolerance."""
+    frac = worst_channel_saturation_fraction(image)
+    return frac <= threshold, {
+        "strategy": name,
+        "saturation_fraction": frac,
+        "saturation_threshold": threshold,
+    }
+
+
 class StrategyFailureMode(enum.Enum):
     """What to do when a strategy's validity check fails."""
 
@@ -98,6 +141,15 @@ class AutofocusStrategy(Protocol):
         a percentile/dynamic-range check instead of a median floor."""
         ...
 
+    def saturation_acceptable(self, image: np.ndarray) -> Tuple[bool, Dict[str, Any]]:
+        """Returns (ok, stats). False -> the brightest channel is saturated
+        beyond this strategy's tolerance and the caller should reduce
+        exposure / illumination before trusting the focus metric. Per-strategy
+        because the right tolerance differs by sample regime: dense tissue can
+        spare ~10% before the metric inverts, while a sparse bead/FISH field
+        clips all of its real signal in only a few percent of pixels."""
+        ...
+
 
 # ---------------------------------------------------------------------------
 # Concrete strategies
@@ -124,6 +176,10 @@ class DenseTextureStrategy:
     rgb_brightness_threshold: float = 240.0
     tissue_mask_range: Tuple[float, float] = (0.10, 0.90)
     median_floor: float = 15.0
+    # Dense tissue tolerates ~10% saturated pixels before the focus metric
+    # starts to invert; above this the AF auto-exposure reducer halves
+    # exposure / illumination.
+    saturation_threshold: float = 0.10
 
     def __post_init__(self) -> None:
         self._score_fn = resolve_metric(self.score_metric_name)
@@ -166,6 +222,9 @@ class DenseTextureStrategy:
             "floor": self.median_floor,
         }
 
+    def saturation_acceptable(self, image: np.ndarray) -> Tuple[bool, Dict[str, Any]]:
+        return _eval_saturation(self.name, self.saturation_threshold, image)
+
 
 @dataclass
 class SparseSignalStrategy:
@@ -193,6 +252,11 @@ class SparseSignalStrategy:
     min_spots: int = 3
     min_peak_intensity: float = 20.0
     bright_pixel_floor: float = 50.0
+    # A sparse field (beads, FISH spots) clips ALL of its real signal in only
+    # a few percent of pixels, so the tolerance is far tighter than tissue --
+    # a tissue-style 10% gate would never fire even when every spot is blown
+    # out. Catch clipping early.
+    saturation_threshold: float = 0.03
 
     def __post_init__(self) -> None:
         self._score_fn = resolve_metric(self.score_metric_name)
@@ -271,6 +335,9 @@ class SparseSignalStrategy:
             "floor": 5.0,
         }
 
+    def saturation_acceptable(self, image: np.ndarray) -> Tuple[bool, Dict[str, Any]]:
+        return _eval_saturation(self.name, self.saturation_threshold, image)
+
 
 @dataclass
 class DarkFieldStrategy:
@@ -291,6 +358,10 @@ class DarkFieldStrategy:
     score_metric_name: str = "brenner_gradient"
     min_gradient_energy: float = 0.002
     p99_floor: float = 30.0
+    # Dark-field signal is the bright tail on a dark background; only a few
+    # percent of pixels should ever be near max, so saturation there means
+    # the real signal is clipping. Tight tolerance, like sparse_signal.
+    saturation_threshold: float = 0.03
 
     def __post_init__(self) -> None:
         self._score_fn = resolve_metric(self.score_metric_name)
@@ -326,6 +397,9 @@ class DarkFieldStrategy:
             "floor": self.p99_floor,
         }
 
+    def saturation_acceptable(self, image: np.ndarray) -> Tuple[bool, Dict[str, Any]]:
+        return _eval_saturation(self.name, self.saturation_threshold, image)
+
 
 @dataclass
 class DenseFluorescenceStrategy:
@@ -349,6 +423,9 @@ class DenseFluorescenceStrategy:
     score_metric_name: str = "vollath_f5"
     min_gradient_energy: float = 0.002
     p99_floor: float = 30.0
+    # Confluent fluorescence fills the frame, so like dense tissue it can
+    # spare ~10% saturated pixels before the metric degrades.
+    saturation_threshold: float = 0.10
 
     def __post_init__(self) -> None:
         self._score_fn = resolve_metric(self.score_metric_name)
@@ -384,6 +461,9 @@ class DenseFluorescenceStrategy:
             "floor": self.p99_floor,
         }
 
+    def saturation_acceptable(self, image: np.ndarray) -> Tuple[bool, Dict[str, Any]]:
+        return _eval_saturation(self.name, self.saturation_threshold, image)
+
 
 @dataclass
 class ManualOnlyStrategy:
@@ -405,6 +485,10 @@ class ManualOnlyStrategy:
 
     def brightness_acceptable(self, image: np.ndarray) -> Tuple[bool, Dict[str, Any]]:
         return True, {"strategy": self.name, "brightness_check": "none"}
+
+    def saturation_acceptable(self, image: np.ndarray) -> Tuple[bool, Dict[str, Any]]:
+        # manual_only never runs auto AF, so saturation is the operator's call.
+        return True, {"strategy": self.name, "saturation_check": "none"}
 
 
 # ---------------------------------------------------------------------------

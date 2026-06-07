@@ -261,3 +261,78 @@ def test_list_strategy_names_matches_manifest():
         "dark_field",
         "manual_only",
     }.issubset(names)
+
+
+# ------------------------------------------------- saturation handling
+# Per-strategy saturation tolerance drives the AF auto-exposure reducer
+# (microscope_command_server _guard_af_saturation). Regression cover for
+# the 2026-05-31 PPM 40x focus runaway, where a saturated red channel
+# inverted the focus metric and walked the stage. See
+# claude-reports/2026-06-02_autofocus-focus-runaway.md.
+
+
+def _rgb_with_channel_saturated(channel: int, fraction: float) -> np.ndarray:
+    """100x100 RGB uint8 image with `fraction` of pixels clipped in `channel`."""
+    img = np.zeros((100, 100, 3), dtype=np.uint8)
+    n_rows = int(round(fraction * 100))
+    img[:n_rows, :, channel] = 255
+    return img
+
+
+class TestSaturationFraction:
+    def test_worst_channel_fraction_rgb(self):
+        img = _rgb_with_channel_saturated(channel=0, fraction=0.20)
+        frac = strategies_module.worst_channel_saturation_fraction(img)
+        assert frac == pytest.approx(0.20)
+
+    def test_monochrome_fraction(self):
+        img = np.zeros((100, 100), dtype=np.uint8)
+        img[:10, :] = 255
+        assert strategies_module.worst_channel_saturation_fraction(img) == pytest.approx(0.10)
+
+    def test_float_0_1_uses_high_level(self):
+        img = np.zeros((10, 10), dtype=np.float32)
+        img[:1, :] = 1.0  # 10% at full scale
+        assert strategies_module.worst_channel_saturation_fraction(img) == pytest.approx(0.10)
+
+    def test_empty_image_is_zero(self):
+        assert strategies_module.worst_channel_saturation_fraction(None) == 0.0
+
+
+class TestSaturationTolerance:
+    def test_dense_texture_tolerates_5pct_not_20pct(self):
+        s = build_strategy("dense_texture")
+        assert s.saturation_threshold == pytest.approx(0.10)
+        assert s.saturation_acceptable(_rgb_with_channel_saturated(2, 0.05))[0] is True
+        assert s.saturation_acceptable(_rgb_with_channel_saturated(0, 0.20))[0] is False
+
+    def test_sparse_rejects_even_5pct(self):
+        # A sparse field clips all its signal in a few percent of pixels, so
+        # the tolerance must be far tighter than dense tissue.
+        s = build_strategy("sparse_signal")
+        assert s.saturation_threshold == pytest.approx(0.03)
+        assert s.saturation_acceptable(_rgb_with_channel_saturated(1, 0.05))[0] is False
+        assert s.saturation_acceptable(_rgb_with_channel_saturated(1, 0.02))[0] is True
+
+    def test_dark_field_tight_like_sparse(self):
+        s = build_strategy("dark_field")
+        assert s.saturation_threshold == pytest.approx(0.03)
+        assert s.saturation_acceptable(_rgb_with_channel_saturated(1, 0.05))[0] is False
+
+    def test_manual_only_never_reduces(self):
+        s = build_strategy("manual_only")
+        # manual_only never runs auto AF; saturation is always "acceptable".
+        assert s.saturation_acceptable(_rgb_with_channel_saturated(0, 0.99))[0] is True
+
+    def test_yaml_override_of_threshold(self):
+        s = build_strategy("dense_texture", {"validity_params": {"saturation_threshold": 0.25}})
+        assert s.saturation_threshold == pytest.approx(0.25)
+        assert s.saturation_acceptable(_rgb_with_channel_saturated(0, 0.20))[0] is True
+
+    def test_stats_payload_shape(self):
+        s = build_strategy("dense_texture")
+        ok, stats = s.saturation_acceptable(_rgb_with_channel_saturated(0, 0.20))
+        assert ok is False
+        assert stats["strategy"] == "dense_texture"
+        assert stats["saturation_fraction"] == pytest.approx(0.20)
+        assert stats["saturation_threshold"] == pytest.approx(0.10)

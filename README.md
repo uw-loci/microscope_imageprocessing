@@ -132,8 +132,12 @@ offsets = generate_z_offsets(n_planes=5, step_um=2.0)
 - `get_projection(name)` - Look up projection function by name string
 - `generate_z_offsets(n_planes, step_um)` - Compute symmetric Z offsets for acquisition
 
-### `microscope_imageprocessing.focus` - Focus Metrics
-- Placeholder for autofocus quality metrics and tissue detection utilities
+### `microscope_imageprocessing.focus` - Focus Metrics and Autofocus Strategies
+- `worst_channel_saturation_fraction()` - Measure pixel saturation (0-1) in the worst channel; used by AF auto-exposure control to prevent metric inversion from clipping
+- **Autofocus Strategies** (`DenseTextureStrategy`, `SparseSignalStrategy`, `DarkFieldStrategy`, `DenseFluorescenceStrategy`, `ManualOnlyStrategy`) - Per-sample-regime focus quality metrics with configurable saturation tolerances:
+  - `saturation_acceptable(image)` - Check if image brightness is within strategy's saturation tolerance before trusting focus metrics
+  - `saturation_threshold` - Configurable per-strategy: dense tissue/fluorescence ≈10%, sparse signal/dark-field ≈3% (tighter because signal clips in fewer pixels)
+  - Other validation methods: `brightness_acceptable()`, `is_valid()`
 
 ## Dependency Chain
 
