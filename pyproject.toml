@@ -1,6 +1,6 @@
 [project]
 name = "microscope-imageprocessing"
-version = "0.1.1"
+version = "0.1.2"
 description = "General-purpose microscopy imaging utilities - debayering, background correction, TIFF I/O, Z-stack projections, focus metrics"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -25,6 +25,7 @@ dependencies = [
     "imagecodecs>=2023.7.0",
     "opencv-python>=4.8.0",
     "Pillow>=10.0.0",
+    "PyYAML>=6.0",
 ]
 
 [project.optional-dependencies]
