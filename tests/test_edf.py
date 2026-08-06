@@ -221,3 +221,54 @@ class TestRegistryIntegration:
     def test_unknown_projection_still_raises(self):
         with pytest.raises(KeyError):
             get_projection("focus_stack")
+
+
+class TestParameterisedProjection:
+    """The registry's contract is List[ndarray] -> ndarray, with no room for
+    parameters, so anything wanting non-default settings goes through the
+    factory. These pin that the settings actually take effect rather than
+    being accepted and ignored."""
+
+    def test_factory_settings_reach_the_fusion(self):
+        from microscope_imageprocessing.zstack import make_edf_projection
+
+        sharp = _textured(64, 64)
+        focal = np.zeros((64, 64), dtype=int)
+        focal[:, 32:] = 2
+        stack = _stack_with_focal_plane(sharp, focal, n_planes=3)
+
+        # index_smooth 0 vs a large median must produce different output on a
+        # focal surface with a step; if the parameter were ignored they would
+        # be identical.
+        unsmoothed = make_edf_projection("tenengrad", window=3, index_smooth=0)(stack)
+        smoothed = make_edf_projection("tenengrad", window=3, index_smooth=11)(stack)
+        assert not np.array_equal(unsmoothed, smoothed)
+
+    def test_factory_metric_choice_takes_effect(self):
+        from microscope_imageprocessing.zstack import make_edf_projection
+
+        sharp = _textured(64, 64)
+        xs = np.linspace(0, 2, 64)
+        focal = np.rint(np.tile(xs, (64, 1))).astype(int)
+        stack = _stack_with_focal_plane(sharp, focal, n_planes=3)
+
+        by_tenengrad = make_edf_projection("tenengrad")(stack)
+        by_variance = make_edf_projection("variance")(stack)
+        # Different operators disagree somewhere on a non-trivial focal surface.
+        assert not np.array_equal(by_tenengrad, by_variance)
+
+    def test_bad_settings_fail_at_build_time_not_mid_acquisition(self):
+        from microscope_imageprocessing.zstack import make_edf_projection
+
+        with pytest.raises(KeyError):
+            make_edf_projection("not_a_metric")
+        with pytest.raises(ValueError, match="window must be >= 1"):
+            make_edf_projection("tenengrad", window=0)
+        with pytest.raises(ValueError, match="index_smooth must be >= 0"):
+            make_edf_projection("tenengrad", index_smooth=-1)
+
+    def test_default_factory_matches_the_registry_entry(self):
+        from microscope_imageprocessing.zstack import PROJECTIONS, make_edf_projection
+
+        stack = [(_textured(32, 32) * 255).astype(np.uint8) for _ in range(3)]
+        assert np.array_equal(make_edf_projection()(stack), PROJECTIONS["edf"](stack))

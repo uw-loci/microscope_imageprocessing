@@ -29,7 +29,7 @@ without a Z-stack; this module only does the selection and fusion.
 from __future__ import annotations
 
 import logging
-from typing import List, Tuple, Union
+from typing import Callable, List, Tuple, Union
 
 import numpy as np
 from scipy import ndimage
@@ -45,8 +45,13 @@ logger = logging.getLogger(__name__)
 #: per-pixel argmax is independently noisy: in a flat region neighbouring
 #: pixels can select different planes for no physical reason, and the fused
 #: image then shows salt-and-pepper texture stitched from several planes.
-#: Real focal surfaces are smooth, so filtering the index map costs nothing
+#: Real focal surfaces are smooth, so filtering the index map costs little
 #: and removes that. 0 disables it.
+#:
+#: 5 is a REASONED STARTING POINT, not a measured optimum, and has not been
+#: swept against real stacks. Larger values enforce a smoother focal surface
+#: -- good for a tilted flat sample, bad where focus genuinely steps (a fold,
+#: or a torn section), since the median will then bridge across the step.
 DEFAULT_INDEX_SMOOTH = 5
 
 
@@ -185,6 +190,50 @@ def focus_height_map(
     return height
 
 
+def make_edf_projection(
+    metric: str = "tenengrad",
+    window: int = DEFAULT_WINDOW,
+    index_smooth: int = DEFAULT_INDEX_SMOOTH,
+) -> Callable[[List[np.ndarray]], np.ndarray]:
+    """Build a registry-shaped EDF projection with specific settings.
+
+    The projection registry's contract is ``List[ndarray] -> ndarray``, with no
+    room for parameters, so a caller that wants non-default settings needs this
+    rather than :func:`get_projection`. Validates eagerly: an unknown metric
+    raises here, at configuration time, instead of part-way through an
+    acquisition that has already cost hours of stage time.
+
+    Args:
+        metric: Sharpness map name -- see
+            :mod:`microscope_imageprocessing.focus.sharpness_maps`.
+        window: Local averaging window for the sharpness map, in pixels.
+        index_smooth: Median-filter size for the chosen-plane index map;
+            0 disables it.
+
+    Returns:
+        A callable taking a Z-stack and returning the fused image.
+
+    Raises:
+        KeyError: Unknown ``metric``.
+        ValueError: Negative ``window`` or ``index_smooth``.
+    """
+    resolve_sharpness_map(metric)  # fail now, not mid-acquisition
+    if window < 1:
+        raise ValueError(f"window must be >= 1, got {window}")
+    if index_smooth < 0:
+        raise ValueError(f"index_smooth must be >= 0, got {index_smooth}")
+
+    def _projection(stack: List[np.ndarray]) -> np.ndarray:
+        result = extended_depth_of_field(
+            stack, metric=metric, window=window, index_smooth=index_smooth
+        )
+        assert isinstance(result, np.ndarray)  # return_height_map defaults False
+        return result
+
+    _projection.__name__ = f"edf_{metric}_w{window}_s{index_smooth}"
+    return _projection
+
+
 def edf_projection(stack: List[np.ndarray]) -> np.ndarray:
     """Registry-compatible EDF projection using default settings.
 
@@ -201,4 +250,5 @@ __all__ = [
     "edf_projection",
     "extended_depth_of_field",
     "focus_height_map",
+    "make_edf_projection",
 ]

@@ -41,10 +41,16 @@ from microscope_imageprocessing.focus.metrics import to_gray
 
 logger = logging.getLogger(__name__)
 
-#: Default local averaging window, in pixels. Odd so it is symmetric about
-#: the pixel. 9 px is a compromise measured on 0.653 um/px brightfield: large
-#: enough that background noise does not produce a spurious argmax, small
-#: enough that the in-focus region's boundary is not smeared across a cell.
+#: Default local averaging window, in pixels. Odd so it is symmetric about the
+#: pixel.
+#:
+#: 9 is a REASONED STARTING POINT, not a measured optimum: large enough that
+#: single-pixel noise cannot produce a spurious argmax, small enough not to
+#: smear the in-focus region's boundary across a whole cell at ~0.65 um/px. It
+#: has not been swept against real stacks. The right value scales with pixel
+#: size and with how noisy the camera is, so it is exposed as a parameter
+#: rather than baked in -- if fused output looks blocky, raise it; if the
+#: boundary between in-focus regions looks smeared, lower it.
 DEFAULT_WINDOW = 9
 
 

@@ -96,6 +96,7 @@ from microscope_imageprocessing.zstack import (
     extended_depth_of_field,
     focus_height_map,
     get_projection,
+    make_edf_projection,
     generate_z_offsets,
 )
 
@@ -115,6 +116,16 @@ height_map = focus_height_map(z_stack_list)
 # Get projection by name (useful for config-driven pipelines)
 proj = get_projection("edf")  # or "max", "min", "mean", etc.
 result = proj(z_stack_list)
+
+# Build an EDF projection with custom settings (for registry-driven config).
+# The defaults (tenengrad, window=9, index_smooth=5) are reasoned starting
+# points, NOT measured optima -- window scales with pixel size and camera
+# noise, so tune it: raise it if the fused output looks blocky or speckled,
+# lower it if in-focus boundaries look smeared. Raise index_smooth for a
+# tilted but flat sample; lower it (or 0) where focus genuinely steps, since
+# a large median bridges the step and picks a plane sharp on neither side.
+custom_edf = make_edf_projection(metric="variance", window=5, index_smooth=0)
+result = custom_edf(z_stack_list)
 
 # Generate Z offsets for acquisition
 offsets = generate_z_offsets(z_range_um=8.0, z_step_um=2.0)
@@ -162,6 +173,7 @@ metric = resolve_sharpness_map("tenengrad")
 - `extended_depth_of_field(stack, metric, ...)` - Focus-aware fusion: select sharpest plane per pixel
 - `focus_height_map(stack, metric, ...)` - Per-pixel index of sharpest plane (diagnose tilt)
 - `get_projection(name)` - Look up projection function by name string (supports "max", "min", "mean", "sum", "std", "edf")
+- `make_edf_projection(metric, window, index_smooth)` - Build a registry-shaped EDF projection with custom settings (for config-driven pipelines with non-default parameters)
 - `generate_z_offsets(z_range_um, z_step_um)` - Compute symmetric Z offsets spanning the TOTAL range (so 8.0 gives +/-4.0)
 
 ### `microscope_imageprocessing.focus` - Focus Metrics and Autofocus Strategies
