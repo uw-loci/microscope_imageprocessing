@@ -3,7 +3,7 @@
 The single home for every focus metric in QPSC. Each metric is a
 function ``f(image: np.ndarray) -> float`` where ``image`` is a 2D
 grayscale array (preprocessing-extracted from multi-channel input by
-``_to_gray``).
+``to_gray``).
 
 The ``resolve_metric(name)`` dispatcher is the only supported way to
 look up a metric function. It validates against the manifest and
@@ -47,7 +47,7 @@ logger = logging.getLogger(__name__)
 # --------------------------------------------------------------- helpers
 
 
-def _to_gray(image: np.ndarray) -> np.ndarray:
+def to_gray(image: np.ndarray) -> np.ndarray:
     """Reduce a multi-component frame to a 2D grayscale array.
 
     Equal-weighted mean across colour channels (alpha dropped):
@@ -311,7 +311,7 @@ def _wrap_with_preprocessing(
     """Adapt a 2D-grayscale metric to also accept multi-channel input."""
 
     def metric(image: np.ndarray) -> float:
-        gray = _to_gray(image)
+        gray = to_gray(image)
         if gray.size == 0:
             return 0.0
         try:

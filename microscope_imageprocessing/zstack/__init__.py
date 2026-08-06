@@ -1,5 +1,10 @@
 """Z-stack projection operators and utilities."""
 
+from microscope_imageprocessing.zstack.edf import (
+    edf_projection,
+    extended_depth_of_field,
+    focus_height_map,
+)
 from microscope_imageprocessing.zstack.projections import (
     max_intensity_projection,
     min_intensity_projection,
@@ -17,6 +22,9 @@ __all__ = [
     "sum_projection",
     "mean_projection",
     "std_projection",
+    "edf_projection",
+    "extended_depth_of_field",
+    "focus_height_map",
     "get_projection",
     "generate_z_offsets",
     "PROJECTIONS",

@@ -36,6 +36,15 @@ from microscope_imageprocessing.focus.metrics import (
     list_metric_names,
     modality_default_metric,
     resolve_metric,
+    to_gray,
+)
+from microscope_imageprocessing.focus.sharpness_maps import (
+    SHARPNESS_MAPS,
+    list_sharpness_map_names,
+    modified_laplacian_map,
+    resolve_sharpness_map,
+    tenengrad_map,
+    variance_map,
 )
 from microscope_imageprocessing.focus.strategies import (
     AutofocusStrategy,
@@ -74,5 +83,12 @@ __all__ = [
     "list_validity_check_names",
     "modality_default_metric",
     "resolve_metric",
+    "resolve_sharpness_map",
     "resolve_validity_check",
+    "SHARPNESS_MAPS",
+    "list_sharpness_map_names",
+    "modified_laplacian_map",
+    "tenengrad_map",
+    "to_gray",
+    "variance_map",
 ]

@@ -10,6 +10,8 @@ from typing import List, Dict, Callable
 
 import numpy as np
 
+from microscope_imageprocessing.zstack.edf import edf_projection
+
 logger = logging.getLogger(__name__)
 
 
@@ -93,6 +95,11 @@ PROJECTIONS: Dict[str, Callable[[List[np.ndarray]], np.ndarray]] = {
     "sum": sum_projection,
     "mean": mean_projection,
     "std": std_projection,
+    # The only focus-aware operator here: picks the sharpest plane per pixel
+    # rather than assuming the wanted signal is the brightest or the darkest.
+    # Necessary for brightfield, where a max projection selects the empty
+    # background and the most defocused tissue.
+    "edf": edf_projection,
 }
 
 
@@ -100,7 +107,7 @@ def get_projection(name: str) -> Callable[[List[np.ndarray]], np.ndarray]:
     """Look up a projection operator by name.
 
     Args:
-        name: Projection name ("max", "min", "sum", "mean", "std")
+        name: Projection name ("max", "min", "sum", "mean", "std", "edf")
 
     Returns:
         Projection function: List[ndarray] -> ndarray
