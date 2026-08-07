@@ -10,7 +10,7 @@ class CPUDebayer:
 
     def __init__(
         self,
-        pattern: str = "RGGB",
+        pattern: str,
         image_bit_clipmax: int = 65535,
         image_dtype: type = np.uint16,
         convolution_mode: str = "reflect",
@@ -18,7 +18,15 @@ class CPUDebayer:
         """Initialize debayering with a Bayer pattern configuration.
 
         Args:
-            pattern: Bayer filter pattern. One of 'RGGB', 'GRBG', 'GBRG', 'BGGR'.
+            pattern: Bayer filter pattern. One of 'RGGB', 'GRBG', 'GBRG',
+                'BGGR'. REQUIRED. A sensor's mosaic order is a physical
+                property of that sensor, so there is no default that is
+                right for an arbitrary camera -- and getting it wrong
+                silently swaps R and B (or shifts the green diagonal) in
+                every frame, with no error. This module previously
+                defaulted to 'RGGB' here and to 'GRBG' in the functions
+                below, so the same image debayered differently depending
+                on which entry point the caller used.
             image_bit_clipmax: Maximum pixel value for clipping (default 65535 for 16-bit).
             image_dtype: Output data type for 16-bit images (default np.uint16).
             convolution_mode: Edge handling mode for scipy.ndimage.convolve (default 'reflect').
@@ -98,12 +106,13 @@ class CPUDebayer:
         return np.clip(rgb, 0, clip_max).astype(input_dtype)
 
 
-def process_image(filepath: str, pattern: str = "GRBG") -> str:
+def process_image(filepath: str, pattern: str) -> str:
     """Debayer a single TIFF image file and save as numpy array.
 
     Args:
         filepath: Path to a raw Bayer pattern TIFF file.
-        pattern: Bayer filter pattern (default 'GRBG').
+        pattern: Bayer filter pattern. Required -- there is no
+            defensible default for a sensor's mosaic order.
 
     Returns:
         Path to the saved RGB numpy file (.npy).
@@ -124,12 +133,13 @@ def process_image(filepath: str, pattern: str = "GRBG") -> str:
     return output_path
 
 
-def process_data(image: np.ndarray, pattern: str = "GRBG") -> np.ndarray:
+def process_data(image: np.ndarray, pattern: str) -> np.ndarray:
     """Debayer an in-memory Bayer pattern image.
 
     Args:
         image: 2D single-channel Bayer pattern image.
-        pattern: Bayer filter pattern (default 'GRBG').
+        pattern: Bayer filter pattern. Required -- there is no
+            defensible default for a sensor's mosaic order.
 
     Returns:
         RGB image as (H, W, 3) array.
@@ -140,12 +150,13 @@ def process_data(image: np.ndarray, pattern: str = "GRBG") -> np.ndarray:
     return rgb
 
 
-def batch_process(file_list: list, pattern: str = "GRBG", n_workers: int = None) -> list:
+def batch_process(file_list: list, pattern: str, n_workers: int = None) -> list:
     """Debayer multiple images in parallel using multiprocessing.
 
     Args:
         file_list: List of paths to raw Bayer pattern TIFF files.
-        pattern: Bayer filter pattern (default 'GRBG').
+        pattern: Bayer filter pattern. Required -- there is no
+            defensible default for a sensor's mosaic order.
         n_workers: Number of parallel workers (default: CPU count).
 
     Returns:
