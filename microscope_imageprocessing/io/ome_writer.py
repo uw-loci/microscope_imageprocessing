@@ -47,6 +47,7 @@ _OME_SCHEMA_LOC = (
     "http://www.openmicroscopy.org/Schemas/OME/2016-06 "
     "http://www.openmicroscopy.org/Schemas/OME/2016-06/ome.xsd"
 )
+_MAP_ANNOTATION_NS = "openmicroscopy.org/omero/client/mapAnnotation"
 
 
 class StackWriter:
@@ -100,6 +101,7 @@ class StackWriter:
         software_tag: str = "QPSC",
         photometric: Optional[str] = "minisblack",
         description_override: Optional[str] = None,
+        map_annotations: Optional[Dict[str, Any]] = None,
     ) -> None:
         if size_t < 1 or size_z < 1 or size_c < 1:
             raise ValueError(
@@ -150,6 +152,12 @@ class StackWriter:
         # for existing callers.
         self.photometric = photometric
         self.description_override = description_override
+        # Free-form key/value metadata, emitted as an OME MapAnnotation and
+        # referenced from the Image. Optional and additive: callers that do not
+        # pass it get byte-identical XML to before. Values are stringified.
+        self.map_annotations: Optional[Dict[str, Any]] = (
+            dict(map_annotations) if map_annotations else None
+        )
 
         self._lock = threading.Lock()
         self._closed = False
@@ -695,6 +703,24 @@ class StackWriter:
                             plane_attrs[xml_attr] = str(plane_meta[meta_key])
                             plane_attrs[unit_attr] = unit_val
                     ET.SubElement(pixels, "Plane", plane_attrs)
+
+        # StructuredAnnotations carries arbitrary key/value metadata that has no
+        # dedicated OME attribute. It must follow the Image elements to satisfy
+        # the schema sequence, so it is appended last.
+        if self.map_annotations:
+            annotation_id = f"Annotation:{file_index}"
+            ET.SubElement(image, "AnnotationRef", {"ID": annotation_id})
+            sa = ET.SubElement(ome, "StructuredAnnotations")
+            ma = ET.SubElement(
+                sa,
+                "MapAnnotation",
+                {"ID": annotation_id, "Namespace": _MAP_ANNOTATION_NS},
+            )
+            value = ET.SubElement(ma, "Value")
+            for key, val in self.map_annotations.items():
+                if val is None:
+                    continue
+                ET.SubElement(value, "M", {"K": str(key)}).text = str(val)
 
         # TIFF UUIDs are optional and not required for tifffile readback.
         ET.register_namespace("", _OME_XMLNS)
