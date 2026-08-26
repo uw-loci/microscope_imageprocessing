@@ -85,6 +85,32 @@ ome_tiff_writer(
     data=image_array,
     compression="lzw",
 )
+
+# Attach arbitrary key/value metadata (emitted as an OME MapAnnotation).
+# Use this for handling rules a reader cannot infer from the pixels -- the
+# motivating case is an axial orientation map, which must be resampled through
+# the doubled angle rather than averaged, and whose value negates under a
+# single mirror. Get either wrong and the result looks plausible but is not.
+from microscope_imageprocessing.io.ome_writer import StackWriter
+import numpy as np
+
+writer = StackWriter(
+    "orientation.ome.tif",
+    size_t=1, size_z=1, size_c=1, size_y=512, size_x=512,
+    dtype=np.dtype("float32"),
+    pixel_size_um=0.325,
+    channel_names=["Slow Axis Orientation (rad, axial)"],
+    map_annotations={
+        "polscope.units": "radians",
+        "polscope.axial": "true",
+        "polscope.resample": "doubled-angle: sin(2t)/cos(2t); NEVER average the angle",
+    },
+    granularity="single",
+)
+try:
+    writer.write_frame(orientation_rad, t=0, z=0, c=0)
+finally:
+    writer.close()
 ```
 
 ### Z-stack Projections
@@ -163,6 +189,7 @@ metric = resolve_sharpness_map("tenengrad")
 
 ### `microscope_imageprocessing.io` - Image I/O
 - `ome_tiff_writer()` - Write OME-TIFF files with pixel size and resolution metadata
+- `StackWriter` - Lower-level OME-TIFF writer for frame-by-frame output. Supports optional `map_annotations` dict for embedding arbitrary key/value metadata (emitted as OME MapAnnotations)
 
 ### `microscope_imageprocessing.zstack` - Z-stack Projections
 - `max_intensity_projection()` - Maximum intensity (fluorescence, SHG)
