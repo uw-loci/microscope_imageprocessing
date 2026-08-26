@@ -86,11 +86,11 @@ ome_tiff_writer(
     compression="lzw",
 )
 
-# Attach arbitrary key/value metadata (emitted as an OME MapAnnotation).
-# Use this for handling rules a reader cannot infer from the pixels -- the
-# motivating case is an axial orientation map, which must be resampled through
-# the doubled angle rather than averaged, and whose value negates under a
-# single mirror. Get either wrong and the result looks plausible but is not.
+# Declare how a channel's values may be combined. Averaging is right for
+# continuous data and meaningless for label maps, object ids and angles --
+# meaningless in the silent way, since the result is still a valid image.
+# Absent metadata means LINEAR, which describes all pre-existing data.
+from microscope_imageprocessing.io import channel_handling, RESAMPLE_ANGULAR_180
 from microscope_imageprocessing.io.ome_writer import StackWriter
 import numpy as np
 
@@ -100,11 +100,10 @@ writer = StackWriter(
     dtype=np.dtype("float32"),
     pixel_size_um=0.325,
     channel_names=["Slow Axis Orientation (rad, axial)"],
-    map_annotations={
-        "polscope.units": "radians",
-        "polscope.axial": "true",
-        "polscope.resample": "doubled-angle: sin(2t)/cos(2t); NEVER average the angle",
-    },
+    map_annotations=channel_handling(
+        RESAMPLE_ANGULAR_180,
+        reason="Axial angle: 0 and 180 degrees are the same direction",
+    ),
     granularity="single",
 )
 try:
@@ -190,6 +189,20 @@ metric = resolve_sharpness_map("tenengrad")
 ### `microscope_imageprocessing.io` - Image I/O
 - `ome_tiff_writer()` - Write OME-TIFF files with pixel size and resolution metadata
 - `StackWriter` - Lower-level OME-TIFF writer for frame-by-frame output. Supports optional `map_annotations` dict for embedding arbitrary key/value metadata (emitted as OME MapAnnotations)
+- **Channel Resampling Policies** - Declare how channels may be combined (averaged) by downstream processing:
+  - `channel_handling(policy, reason=None)` - Build annotation entries declaring channel resampling rules; merge result into `map_annotations`
+  - `resample_policy(annotations)` - Query the declared policy (defaults to `RESAMPLE_LINEAR` when absent)
+  - `may_combine(annotations)` - Check whether averaging, interpolating, or blending is permitted (True only for LINEAR)
+  - `RESAMPLE_LINEAR` - Values may be averaged and interpolated (default for all existing data)
+  - `RESAMPLE_NEAREST` - Values must be selected, never combined (labels, IDs)
+  - `RESAMPLE_ANGULAR_180` - Axial angle; combine only via sin(2t)/cos(2t) mathematics
+  - `RESAMPLE_ANGULAR_360` - Directional angle; combine only via sin(t)/cos(t) mathematics
+
+  **The contract is fail-safe: only the literal `linear` authorises combining values.**
+  Any other policy -- including one a future writer adds that today's reader has never
+  heard of -- is treated as non-combinable. An unrecognised policy therefore degrades to
+  preserving the data rather than to silently destroying it, which is the whole reason
+  this is a declared vocabulary rather than a boolean.
 
 ### `microscope_imageprocessing.zstack` - Z-stack Projections
 - `max_intensity_projection()` - Maximum intensity (fluorescence, SHG)
