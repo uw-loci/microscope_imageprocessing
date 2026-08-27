@@ -45,14 +45,17 @@ __all__ = [
     "RESAMPLE_KEY",
     "RESAMPLE_LINEAR",
     "RESAMPLE_NEAREST",
+    "RESAMPLE_PERIOD_KEY",
     "RESAMPLE_REASON_KEY",
     "channel_handling",
     "may_combine",
+    "resample_period",
     "resample_policy",
 ]
 
 RESAMPLE_KEY = "qpsc.resample"
 RESAMPLE_REASON_KEY = "qpsc.resample_reason"
+RESAMPLE_PERIOD_KEY = "qpsc.resample_period"
 
 RESAMPLE_LINEAR = "linear"
 RESAMPLE_NEAREST = "nearest"
@@ -62,13 +65,22 @@ RESAMPLE_ANGULAR_360 = "angular360"
 _KNOWN = frozenset({RESAMPLE_LINEAR, RESAMPLE_NEAREST, RESAMPLE_ANGULAR_180, RESAMPLE_ANGULAR_360})
 
 
-def channel_handling(policy: str, reason: Optional[str] = None) -> Dict[str, Any]:
+_ANGULAR = frozenset({RESAMPLE_ANGULAR_180, RESAMPLE_ANGULAR_360})
+
+
+def channel_handling(
+    policy: str, reason: Optional[str] = None, period: Optional[float] = None
+) -> Dict[str, Any]:
     """Build the annotation entries declaring how a channel may be resampled.
 
     Merge the result into the ``map_annotations`` passed to the OME writer.
 
     Args:
         policy: One of the ``RESAMPLE_*`` constants.
+        period: For angular policies, the stored value spanning one full cycle
+            (e.g. 18000 when 0..18000 counts span 0..180 degrees). Required for
+            them, because a reader holding counts cannot otherwise recover
+            angles to average.
         reason: Short human-readable justification. Worth supplying -- an
             operator reading the metadata later needs to know *why* a channel
             is restricted, not just that it is.
@@ -80,10 +92,39 @@ def channel_handling(policy: str, reason: Optional[str] = None) -> Dict[str, Any
     """
     if policy not in _KNOWN:
         raise ValueError(f"unknown resample policy {policy!r}; expected one of {sorted(_KNOWN)}")
+    if policy in _ANGULAR and not period:
+        raise ValueError(
+            f"policy {policy!r} requires period=<stored value spanning one full cycle>. "
+            "Without it a reader cannot convert counts to angles, so it can only fall "
+            "back to nearest-neighbour and the channel loses the correct averaging it "
+            "was declaring."
+        )
     out: Dict[str, Any] = {RESAMPLE_KEY: policy}
     if reason:
         out[RESAMPLE_REASON_KEY] = reason
+    if period:
+        out[RESAMPLE_PERIOD_KEY] = period
     return out
+
+
+def resample_period(annotations: Optional[Mapping[str, Any]]) -> Optional[float]:
+    """Stored value spanning one full cycle, or None if not declared.
+
+    Required to average an angular channel: the values are counts, and without
+    the period there is no way to turn them into angles. A reader that finds an
+    angular policy with no period must fall back to nearest-neighbour rather
+    than guess a scale.
+    """
+    if not annotations:
+        return None
+    raw = annotations.get(RESAMPLE_PERIOD_KEY)
+    if raw is None:
+        return None
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        return None
+    return value if value > 0 else None
 
 
 def resample_policy(annotations: Optional[Mapping[str, Any]]) -> str:

@@ -64,7 +64,9 @@ class TestFailSafe:
 
 class TestBuilder:
     def test_builds_the_entries(self):
-        got = channel_handling(RESAMPLE_ANGULAR_180, reason="axial: 0 and 180 are the same axis")
+        got = channel_handling(
+            RESAMPLE_ANGULAR_180, reason="axial: 0 and 180 are the same axis", period=18000
+        )
         assert got[RESAMPLE_KEY] == RESAMPLE_ANGULAR_180
         assert "axial" in got[RESAMPLE_REASON_KEY]
 
@@ -80,3 +82,40 @@ class TestBuilder:
     def test_round_trips_through_may_combine(self):
         assert may_combine(channel_handling(RESAMPLE_LINEAR)) is True
         assert may_combine(channel_handling(RESAMPLE_NEAREST)) is False
+
+
+class TestPeriod:
+    """Angular channels store counts; without the period they cannot be averaged."""
+
+    def test_angular_requires_a_period(self):
+        from microscope_imageprocessing.io import RESAMPLE_ANGULAR_360
+
+        for policy in (RESAMPLE_ANGULAR_180, RESAMPLE_ANGULAR_360):
+            with pytest.raises(ValueError, match="requires period"):
+                channel_handling(policy)
+
+    def test_non_angular_policies_do_not(self):
+        from microscope_imageprocessing.io import resample_period
+
+        assert resample_period(channel_handling(RESAMPLE_NEAREST)) is None
+        assert resample_period(channel_handling(RESAMPLE_LINEAR)) is None
+
+    def test_period_round_trips(self):
+        from microscope_imageprocessing.io import resample_period
+
+        got = channel_handling(RESAMPLE_ANGULAR_180, period=18000)
+        assert resample_period(got) == 18000.0
+
+    @pytest.mark.parametrize(
+        "bad",
+        [
+            {"qpsc.resample_period": "not-a-number"},
+            {"qpsc.resample_period": 0},
+            {"qpsc.resample_period": -5},
+        ],
+    )
+    def test_an_unusable_period_reads_as_absent(self, bad):
+        """So the reader falls back to nearest rather than dividing by nonsense."""
+        from microscope_imageprocessing.io import resample_period
+
+        assert resample_period(bad) is None
