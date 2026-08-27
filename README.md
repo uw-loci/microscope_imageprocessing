@@ -103,6 +103,7 @@ writer = StackWriter(
     map_annotations=channel_handling(
         RESAMPLE_ANGULAR_180,
         reason="Axial angle: 0 and 180 degrees are the same direction",
+        period=18000,  # stored counts spanning 0..180 degrees
     ),
     granularity="single",
 )
@@ -190,13 +191,14 @@ metric = resolve_sharpness_map("tenengrad")
 - `ome_tiff_writer()` - Write OME-TIFF files with pixel size and resolution metadata
 - `StackWriter` - Lower-level OME-TIFF writer for frame-by-frame output. Supports optional `map_annotations` dict for embedding arbitrary key/value metadata (emitted as OME MapAnnotations)
 - **Channel Resampling Policies** - Declare how channels may be combined (averaged) by downstream processing:
-  - `channel_handling(policy, reason=None)` - Build annotation entries declaring channel resampling rules; merge result into `map_annotations`
+  - `channel_handling(policy, reason=None, period=None)` - Build annotation entries declaring channel resampling rules; merge result into `map_annotations`. For angular policies (`RESAMPLE_ANGULAR_180`, `RESAMPLE_ANGULAR_360`), `period` is required: the stored count value spanning one full cycle (e.g., 18000 for counts 0..18000 spanning 0..180 degrees).
   - `resample_policy(annotations)` - Query the declared policy (defaults to `RESAMPLE_LINEAR` when absent)
+  - `resample_period(annotations)` - Query the period from annotations, or None if not declared. Required to average angular data; readers missing the period must fall back to nearest-neighbour.
   - `may_combine(annotations)` - Check whether averaging, interpolating, or blending is permitted (True only for LINEAR)
   - `RESAMPLE_LINEAR` - Values may be averaged and interpolated (default for all existing data)
   - `RESAMPLE_NEAREST` - Values must be selected, never combined (labels, IDs)
-  - `RESAMPLE_ANGULAR_180` - Axial angle; combine only via sin(2t)/cos(2t) mathematics
-  - `RESAMPLE_ANGULAR_360` - Directional angle; combine only via sin(t)/cos(t) mathematics
+  - `RESAMPLE_ANGULAR_180` - Axial angle; combine only via sin(2t)/cos(2t) mathematics (requires period)
+  - `RESAMPLE_ANGULAR_360` - Directional angle; combine only via sin(t)/cos(t) mathematics (requires period)
 
   **The contract is fail-safe: only the literal `linear` authorises combining values.**
   Any other policy -- including one a future writer adds that today's reader has never
