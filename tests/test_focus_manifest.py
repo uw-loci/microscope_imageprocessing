@@ -102,12 +102,13 @@ class TestManifestStructure:
         for old, new in m.removed_aliases.items():
             assert new in m.metrics, f"Alias {old!r} targets {new!r} which is not a real metric."
 
-    def test_four_validity_checks(self):
+    def test_shipped_validity_checks(self):
         m = load_manifest()
         assert set(m.validity_checks) == {
             "texture_and_area",
             "bright_spot_count",
             "total_gradient_energy",
+            "chroma_deviation",
             "always_false",
         }
 

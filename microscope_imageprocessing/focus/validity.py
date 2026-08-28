@@ -34,7 +34,7 @@ Implementation choices for checks that previously had multiple incarnations:
 from __future__ import annotations
 
 import logging
-from typing import Any, Callable, Dict, Tuple
+from typing import Any, Callable, Dict, Optional, Tuple
 
 import numpy as np
 
@@ -253,6 +253,92 @@ def always_false(image: np.ndarray, **_unused: Any) -> Tuple[bool, Dict[str, Any
     return False, {"validity_check": "always_false"}
 
 
+# ------------------------------------------------- chroma_deviation
+
+
+def chroma_deviation(
+    image: np.ndarray,
+    min_chroma: float = 12.0,
+    chroma_area_threshold: float = 0.150,
+    white_reference: Optional[np.ndarray] = None,
+    saturation_ceiling: float = 250.0,
+    **_unused: Any,
+) -> Tuple[bool, Dict[str, Any]]:
+    """Is there stained material in view -- judged by COLOUR, not sharpness.
+
+    Every other check here asks whether the image is structured, which makes them all
+    defocus-dependent: blur destroys spatial structure, so a badly out-of-focus field of
+    tissue looks exactly like blank glass to them. That is fatal for the job they get used
+    for -- deciding, from a scan that is out of focus almost everywhere, whether there is
+    anything worth focusing ON.
+
+    Colour survives defocus. Blur spreads a stained pixel over its neighbours but does not
+    change what wavelengths were absorbed, so an H&E field stays pink/purple however soft it
+    is, while blank glass under brightfield stays neutral. That is how a person recognises
+    tissue in a badly focused field, and it is what this measures: the fraction of pixels
+    whose colour is far enough from neutral grey.
+
+    Chroma is max(R,G,B) - min(R,G,B), which is the unnormalised saturation. Deliberately NOT
+    a hue angle: hue is meaningless and numerically unstable on near-neutral pixels, which is
+    most of a mostly-blank field. Deliberately NOT normalised per frame either -- that is the
+    flaw in ``texture_and_area``'s area term, where per-frame min/max scaling makes the mask
+    cover nearly every pixel of any unimodal field, so the area fraction reads ~1.0 whether or
+    not there is tissue (observed at 0.9989 and 0.99992 on fields that had none).
+
+    :param image: HxWx3 RGB. A 2-D (monochrome) image has no colour information and returns
+        False -- honestly, rather than by pretending a grey level means something.
+    :param min_chroma: how far from neutral, in 8-bit counts, a pixel must be to count as
+        stained. Sensor noise and slight illumination cast put blank glass in the low single
+        digits; H&E sits well above it even when badly blurred.
+    :param chroma_area_threshold: fraction of pixels that must clear ``min_chroma``.
+    :param white_reference: optional per-pixel background (a collected flat field). When
+        given, the frame is divided by it first, which removes the illumination's own colour
+        cast and vignetting -- both of which otherwise add chroma that is not the sample's.
+    :param saturation_ceiling: pixels at or above this in every channel are clipped and their
+        colour is not trustworthy; they are excluded from the fraction.
+    """
+    stats: Dict[str, Any] = {"validity_check": "chroma_deviation"}
+    if image is None or image.ndim != 3 or image.shape[2] < 3:
+        stats["rejected_reason"] = "not_colour"
+        return False, stats
+
+    rgb = image[:, :, :3].astype(np.float32)
+
+    if white_reference is not None:
+        ref = np.asarray(white_reference, dtype=np.float32)
+        if ref.shape[:2] == rgb.shape[:2] and ref.ndim == 3 and ref.shape[2] >= 3:
+            # Flat-field: divide, then rescale to the reference's own mean so the numbers stay
+            # in 8-bit-ish units and min_chroma keeps its meaning.
+            safe = np.where(ref[:, :, :3] <= 1.0, 1.0, ref[:, :, :3])
+            rgb = rgb / safe * float(np.mean(safe))
+        else:
+            stats["white_reference"] = "ignored (shape mismatch)"
+
+    hi = rgb.max(axis=2)
+    lo = rgb.min(axis=2)
+    chroma = hi - lo
+
+    usable = lo < saturation_ceiling
+    usable_count = int(np.count_nonzero(usable))
+    if usable_count == 0:
+        stats["rejected_reason"] = "all_pixels_clipped"
+        return False, stats
+
+    stained = np.count_nonzero((chroma >= min_chroma) & usable)
+    fraction = stained / usable_count
+
+    stats.update(
+        {
+            "chroma_fraction": float(fraction),
+            "chroma_area_threshold": chroma_area_threshold,
+            "median_chroma": float(np.median(chroma[usable])),
+            "min_chroma": min_chroma,
+            "usable_fraction": usable_count / float(chroma.size),
+        }
+    )
+    return bool(fraction > chroma_area_threshold), stats
+
+
 # ------------------------------------------------------------- registry
 
 # Names MUST match the manifest's validity_checks list. The test suite
@@ -261,6 +347,7 @@ _IMPLEMENTATIONS: Dict[str, ValidityCheckFn] = {
     "texture_and_area": texture_and_area,
     "bright_spot_count": bright_spot_count,
     "total_gradient_energy": total_gradient_energy,
+    "chroma_deviation": chroma_deviation,
     "always_false": always_false,
 }
 

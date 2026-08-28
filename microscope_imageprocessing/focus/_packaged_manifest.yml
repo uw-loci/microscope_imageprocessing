@@ -239,6 +239,20 @@ validity_checks:
       min_peak_intensity:     { type: float, default: 20.0, range: [0.0, 65535.0] }
       bright_pixel_floor:     { type: float, default: 50.0, range: [0.0, 65535.0] }
 
+  - name: chroma_deviation
+    description: |
+      Fraction of pixels whose colour is far from neutral grey. The only
+      validity check here that does NOT depend on focus: blur destroys
+      spatial structure but not absorbed wavelengths, so stained tissue
+      stays coloured however soft it is while blank glass stays neutral.
+      Use it where the decision has to be made from an out-of-focus frame
+      -- an approach scan asking "is there anything here worth focusing
+      on". Brightfield/H&E-like colour only; returns False on monochrome.
+    params:
+      min_chroma:            { type: float, default: 12.0,  range: [0.0, 255.0] }
+      chroma_area_threshold: { type: float, default: 0.150, range: [0.0, 1.0] }
+      saturation_ceiling:    { type: float, default: 250.0, range: [0.0, 255.0] }
+
   - name: total_gradient_energy
     description: |
       Whole-FOV gradient magnitude above a floor. Default validity check

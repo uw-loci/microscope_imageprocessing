@@ -19,6 +19,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+from microscope_imageprocessing.focus.validity import chroma_deviation
 from microscope_imageprocessing.focus import (
     UnknownMetricError,
     clear_cache,
@@ -216,5 +217,64 @@ def test_list_validity_check_names_includes_canonicals():
         "texture_and_area",
         "bright_spot_count",
         "total_gradient_energy",
+        "chroma_deviation",
         "always_false",
     }
+
+
+# --------------------------------------------------------- chroma_deviation
+
+
+def _rgb(h, w, r, g, b):
+    img = np.zeros((h, w, 3), dtype=np.uint8)
+    img[:, :, 0], img[:, :, 1], img[:, :, 2] = r, g, b
+    return img
+
+
+def test_chroma_rejects_neutral_bright_field():
+    # Blank glass under brightfield: near-white and near-neutral. This is the field that
+    # texture_and_area passed with area=0.9999 because per-frame normalisation makes its
+    # area term meaningless.
+    ok, stats = chroma_deviation(_rgb(32, 32, 205, 205, 210))
+    assert not ok
+    assert stats["chroma_fraction"] == 0.0
+
+
+def test_chroma_accepts_stained_field_however_blurred():
+    # Eosin pink. Nothing here is sharp -- the point is that colour alone decides, so a
+    # completely uniform (i.e. infinitely defocused) stained field still passes.
+    ok, stats = chroma_deviation(_rgb(32, 32, 210, 150, 175))
+    assert ok
+    assert stats["chroma_fraction"] == 1.0
+
+
+def test_chroma_needs_enough_stained_area():
+    img = _rgb(10, 10, 205, 205, 208)
+    img[:1, :, :] = [210, 150, 175]  # 10% stained
+    ok, _ = chroma_deviation(img, chroma_area_threshold=0.15)
+    assert not ok
+    ok, _ = chroma_deviation(img, chroma_area_threshold=0.05)
+    assert ok
+
+
+def test_chroma_reports_monochrome_honestly():
+    ok, stats = chroma_deviation(np.full((16, 16), 128, dtype=np.uint8))
+    assert not ok
+    assert stats["rejected_reason"] == "not_colour"
+
+
+def test_chroma_excludes_clipped_pixels():
+    ok, stats = chroma_deviation(_rgb(16, 16, 255, 255, 255))
+    assert not ok
+    assert stats["rejected_reason"] == "all_pixels_clipped"
+
+
+def test_white_reference_removes_an_illumination_colour_cast():
+    # A blue-ish lamp makes neutral glass look coloured; dividing by the flat field it
+    # produced takes that back out, so the frame is judged on the sample's colour alone.
+    cast = _rgb(16, 16, 180, 190, 220)
+    ok_without, _ = chroma_deviation(cast, min_chroma=12.0)
+    ok_with, stats = chroma_deviation(cast, min_chroma=12.0, white_reference=cast)
+    assert ok_without
+    assert not ok_with
+    assert stats["chroma_fraction"] == 0.0
