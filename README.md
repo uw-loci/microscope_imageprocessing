@@ -226,6 +226,17 @@ metric = resolve_sharpness_map("tenengrad")
   - `saturation_threshold` - Configurable per-strategy: dense tissue/fluorescence ≈10%, sparse signal/dark-field ≈3% (tighter because signal clips in fewer pixels)
   - Other validation methods: `brightness_acceptable()`, `is_valid()`
 
+### `microscope_imageprocessing.focus.validity` - Validity Checks for Frame Quality
+Frame validity checks decide whether a frame is suitable for use — all are registered in a manifest and can be configured via YAML parameters. Available checks:
+- `texture_and_area` - Gradient texture AND tissue-area fraction. Note both are measured on a PER-FRAME min/max normalised image, so the area term saturates near 1.0 on any unimodal field and rarely rejects on its own
+- `bright_spot_count` - Counts isolated bright regions (nuclei, beads, or out-of-focus particles)
+- `total_gradient_energy` - Measures whole-FOV gradient magnitude above a floor
+- `chroma_deviation` - Detects stained material via color (not focus). Unlike sharpness-based checks, this survives defocus: colour survives blur while spatial structure does not. Use where the frame may be out of focus (e.g., approach scans deciding "is there anything worth focusing on?"). Requires RGB input; returns False on monochrome.
+  - Parameters: `min_chroma` (8-bit distance from neutral), `chroma_area_threshold` (fraction of pixels), `saturation_ceiling` (exclude clipped pixels)
+- `always_false` - Always rejects. Used by the `manual_only` strategy so the workflow's `on_failure=MANUAL` handler always reaches the manual-focus dialog
+
+`chroma_deviation` alone accepts an optional `white_reference` (a collected flat field); it divides by it first, removing the illumination's own colour cast and vignetting, both of which otherwise contribute chroma that is not the sample's.
+
 ### `microscope_imageprocessing.focus.sharpness_maps` - Per-Pixel Sharpness Maps
 - `tenengrad_map(image, window)` - Squared gradient magnitude; best for edge contrast
 - `modified_laplacian_map(image, window)` - Modified Laplacian (Nayar and Nakagawa); sharper Z peaks, noise-sensitive
