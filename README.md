@@ -232,7 +232,7 @@ Frame validity checks decide whether a frame is suitable for use — all are reg
 - `bright_spot_count` - Counts isolated bright regions (nuclei, beads, or out-of-focus particles)
 - `total_gradient_energy` - Measures whole-FOV gradient magnitude above a floor
 - `chroma_deviation` - Detects stained material via color (not focus). Unlike sharpness-based checks, this survives defocus: colour survives blur while spatial structure does not. Use where the frame may be out of focus (e.g., approach scans deciding "is there anything worth focusing on?"). Requires RGB input; returns False on monochrome.
-  - Parameters: `min_chroma` (8-bit distance from neutral), `chroma_area_threshold` (fraction of pixels), `saturation_ceiling` (exclude clipped pixels)
+  - Parameters: `min_chroma` (8-bit distance from neutral; default 28.0, measured from a tissue/blank pair; blank glass carries an illumination cast, so the bar is not near zero), `chroma_area_threshold` (fraction of pixels), `saturation_ceiling` (exclude clipped pixels)
 - `always_false` - Always rejects. Used by the `manual_only` strategy so the workflow's `on_failure=MANUAL` handler always reaches the manual-focus dialog
 
 `chroma_deviation` alone accepts an optional `white_reference` (a collected flat field); it divides by it first, removing the illumination's own colour cast and vignetting, both of which otherwise contribute chroma that is not the sample's.
