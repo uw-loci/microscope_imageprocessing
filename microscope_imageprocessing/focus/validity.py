@@ -258,7 +258,7 @@ def always_false(image: np.ndarray, **_unused: Any) -> Tuple[bool, Dict[str, Any
 
 def chroma_deviation(
     image: np.ndarray,
-    min_chroma: float = 12.0,
+    min_chroma: float = 28.0,
     chroma_area_threshold: float = 0.150,
     white_reference: Optional[np.ndarray] = None,
     saturation_ceiling: float = 250.0,
@@ -288,8 +288,16 @@ def chroma_deviation(
     :param image: HxWx3 RGB. A 2-D (monochrome) image has no colour information and returns
         False -- honestly, rather than by pretending a grey level means something.
     :param min_chroma: how far from neutral, in 8-bit counts, a pixel must be to count as
-        stained. Sensor noise and slight illumination cast put blank glass in the low single
-        digits; H&E sits well above it even when badly blurred.
+        stained. The default is set from a measured PPM pair (2026-08-28, 10x, H&E): bare
+        glass held a median chroma of 11-13 across a 256 um traverse and stained tissue held
+        36, so the bar sits between them rather than at the plausible-looking low single
+        digits -- blank glass is NOT neutral, because the lamp and the debayer both put a cast
+        on it. A bar of 12 fell inside the blank's own distribution and passed about half its
+        pixels, which would have made the check return True on everything.
+
+        Re-measure this on any rig whose illumination differs: pass ``white_reference`` if a
+        flat field is available, since most of that 11-13 floor is the illumination's own
+        colour and dividing it out lets the bar sit much lower.
     :param chroma_area_threshold: fraction of pixels that must clear ``min_chroma``.
     :param white_reference: optional per-pixel background (a collected flat field). When
         given, the frame is divided by it first, which removes the illumination's own colour
