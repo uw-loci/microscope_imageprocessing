@@ -278,3 +278,92 @@ def test_white_reference_removes_an_illumination_colour_cast():
     assert ok_without
     assert not ok_with
     assert stats["chroma_fraction"] == 0.0
+
+
+# ------------------------- why PPM's tissue gate moved to chroma
+
+
+def _glass(noise=2.0, h=64, w=64, seed=0):
+    """Bare slide glass as the camera sees it: near-uniform, with the measured colour cast.
+
+    (206, 200, 194) rather than neutral -- on PPM the lamp and the debayer both tint it, and
+    the measured median chroma of blank glass is 11-13, not 0.
+    """
+    rng = np.random.default_rng(seed)
+    img = np.zeros((h, w, 3), dtype=np.float64)
+    img[:, :, 0], img[:, :, 1], img[:, :, 2] = 206, 200, 194
+    img += rng.normal(0.0, noise, img.shape)
+    return np.clip(img, 0, 255).astype(np.uint8)
+
+
+def _tissue_edge_tile(coverage=0.25, h=64, w=64, seed=0):
+    """A tile straddling a tissue edge: mostly blank glass, a quarter stained.
+
+    The field the user photographed on 2026-08-28 -- "very close to the edge of the tissue
+    for the tile selection". H&E sits about 36 counts of chroma from the glass around it.
+    """
+    rng = np.random.default_rng(seed)
+    img = np.zeros((h, w, 3), dtype=np.float64)
+    img[:, :, 0], img[:, :, 1], img[:, :, 2] = 206, 200, 194
+    stained = int(coverage * w)
+    if stained:
+        img[:, :stained, 0] = 200
+        img[:, :stained, 1] = 182
+        img[:, :stained, 2] = 164
+    img += rng.normal(0.0, 0.4, img.shape)
+    return np.clip(img, 0, 255).astype(np.uint8)
+
+
+@pytest.mark.parametrize("noise", [0.4, 2.0, 5.0])
+def test_texture_and_area_passes_bare_glass(noise):
+    """The defect that made the approach's tissue gate a no-op in the direction that matters.
+
+    The gate exists to reject a coverslip or slide surface, and texture_and_area cannot: it
+    normalises per frame, so a featureless field's own sensor noise is stretched to the full
+    dynamic range and reads as texture ~0.06 against PPM's 0.005 threshold, with area 1.000.
+    Not a tuning problem -- it holds at every noise level, so no threshold fixes it.
+
+    Documented rather than fixed: texture_and_area is still correct where a frame has real
+    structure, and other scopes depend on its current behaviour. PPM's gate moved to chroma
+    instead.
+    """
+    ok, stats = validity_module.texture_and_area(
+        _glass(noise), texture_threshold=0.005, tissue_mask_range=[0.05, 0.95]
+    )
+    assert ok, "if this ever starts failing, revisit whether PPM still needs chroma"
+    assert stats["texture"] > 0.005
+
+
+def test_chroma_rejects_the_glass_texture_passes():
+    ok, stats = validity_module.chroma_deviation(
+        _glass(), min_chroma=28.0, chroma_area_threshold=0.15
+    )
+    assert not ok
+    assert stats["chroma_fraction"] < 0.02
+
+
+def test_texture_and_area_collapses_on_a_two_level_field():
+    """The other half of the same normalisation flaw, in the opposite direction.
+
+    A tile straddling a tissue edge is two-level, so per-frame normalisation puts every pixel
+    at one end or the other: nothing lands inside the default tissue_mask_range and the area
+    term reads exactly 0.000 on a field that is a quarter tissue. Between this and
+    test_texture_and_area_passes_bare_glass, the check's verdict is driven by how the frame's
+    own histogram happens to normalise rather than by what is in it.
+
+    PPM widens tissue_mask_range to [0.05, 0.95], which happens to rescue THIS field -- so
+    this is asserted at the shipped defaults, where the collapse is unambiguous.
+    """
+    ok, stats = validity_module.texture_and_area(_tissue_edge_tile())
+    assert not ok
+    assert stats["area"] == 0.0
+
+
+def test_chroma_accepts_the_edge_tile():
+    """Chroma judges the same tile on its stain, so coverage is what decides -- not the
+    histogram's shape. 25% tissue clears the 15% area bar with margin either side."""
+    ok, stats = validity_module.chroma_deviation(
+        _tissue_edge_tile(), min_chroma=28.0, chroma_area_threshold=0.15
+    )
+    assert ok
+    assert stats["chroma_fraction"] > 0.15
