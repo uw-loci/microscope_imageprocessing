@@ -221,6 +221,10 @@ metric = resolve_sharpness_map("tenengrad")
 ### `microscope_imageprocessing.focus` - Focus Metrics and Autofocus Strategies
 - `worst_channel_saturation_fraction()` - Measure pixel saturation (0-1) in the worst channel; used by AF auto-exposure control to prevent metric inversion from clipping
 - `to_gray()` - Reduce multi-channel image to grayscale with equal-weighted mean
+- **Plane Detection** - Distinguish sample from debris when selecting a focus plane:
+  - `detect_focus_plane(zs, profiles, ...)` - Find the Z where the sample is, by measuring where sharpness concentrates (not how much). Returns `PlaneResult` with the best Z or rejection reason. Calibrated for 8×8 block grids; rejects fields where only debris is sharp.
+  - `block_focus_profile(image, grid)` - Compute per-block focus metric: mean squared gradient for each grid cell (default 8×8). Returns grid×grid array used as input to `detect_focus_plane()`.
+  - `PlaneResult` - Dataclass holding the detected plane Z, block agreement count and dispersion (spread), and rejection details if no plane was accepted.
 - **Autofocus Strategies** (`DenseTextureStrategy`, `SparseSignalStrategy`, `DarkFieldStrategy`, `DenseFluorescenceStrategy`, `ManualOnlyStrategy`) - Per-sample-regime focus quality metrics with configurable saturation tolerances:
   - `saturation_acceptable(image)` - Check if image brightness is within strategy's saturation tolerance before trusting focus metrics
   - `saturation_threshold` - Configurable per-strategy: dense tissue/fluorescence ≈10%, sparse signal/dark-field ≈3% (tighter because signal clips in fewer pixels)
