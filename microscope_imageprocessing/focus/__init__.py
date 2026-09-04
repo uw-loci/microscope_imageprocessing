@@ -38,6 +38,11 @@ from microscope_imageprocessing.focus.metrics import (
     resolve_metric,
     to_gray,
 )
+from microscope_imageprocessing.focus.planes import (
+    PlaneResult,
+    block_focus_profile,
+    detect_focus_plane,
+)
 from microscope_imageprocessing.focus.sharpness_maps import (
     SHARPNESS_MAPS,
     list_sharpness_map_names,
@@ -62,6 +67,9 @@ from microscope_imageprocessing.focus.validity import (
 )
 
 __all__ = [
+    "detect_focus_plane",
+    "block_focus_profile",
+    "PlaneResult",
     "AutofocusStrategy",
     "DarkFieldStrategy",
     "DenseTextureStrategy",
