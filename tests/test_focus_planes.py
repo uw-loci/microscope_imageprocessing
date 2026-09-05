@@ -151,3 +151,61 @@ def test_block_profile_shape_and_orientation():
 
 def test_too_few_samples_is_refused_not_guessed():
     assert not detect_focus_plane([0.0, -1.0], [np.ones((GRID, GRID))] * 2).found
+
+
+# ------------------- what the YAML says is what runs
+
+
+def test_yaml_validity_check_is_authoritative_over_the_strategy_class():
+    """The defect that cost slide ppm_20x_22 on the 2026-08-29 run.
+
+    autofocus_PPM.yml bound modality ppm to a strategy declaring chroma_deviation. That
+    strategy name had no class of its own, so build_strategy fell back to dense_texture --
+    and dense_texture hardcodes texture_and_area, while the YAML's validity_check was
+    dropped as a display-only annotation. The log then reported the operator's strategy
+    name next to the verdict of a check they had replaced, and 469 of 1250 autofocus
+    attempts were skipped on that verdict.
+    """
+    from microscope_imageprocessing.focus.strategies import build_strategy
+
+    s = build_strategy(
+        "stained_colour",
+        {
+            "validity_check": "chroma_deviation",
+            "validity_params": {"min_chroma": 28.0, "chroma_area_threshold": 0.15},
+            "score_metric": "laplacian_variance",
+            "on_failure": "defer",
+        },
+    )
+    stained = np.zeros((64, 64, 3), dtype=np.uint8)
+    stained[:, :, 0], stained[:, :, 1], stained[:, :, 2] = 200, 182, 164
+    ok, stats = s.is_valid(stained)
+    assert (
+        stats["validity_check"] == "chroma_deviation"
+    ), "the YAML's check must be the one that runs"
+    assert stats["strategy"] == "stained_colour"
+    assert ok
+
+
+def test_an_unavailable_declared_check_keeps_the_class_default_rather_than_crashing():
+    from microscope_imageprocessing.focus.strategies import build_strategy
+
+    s = build_strategy("dense_texture", {"validity_check": "no_such_check"})
+    ok, stats = s.is_valid(np.random.default_rng(0).integers(0, 255, (64, 64), dtype=np.uint8))
+    assert stats["validity_check"] == "texture_and_area"
+
+
+def test_saturation_means_clipped_not_merely_bright():
+    """Raw 8-bit saturation is 255 and nothing else.
+
+    A channel at 254 carries real information; counting it as saturated made the AF
+    exposure reducer chase frames that were never clipped.
+    """
+    from microscope_imageprocessing.focus.strategies import worst_channel_saturation_fraction
+
+    assert worst_channel_saturation_fraction(np.full((16, 16, 3), 254, np.uint8)) == 0.0
+    assert worst_channel_saturation_fraction(np.full((16, 16, 3), 255, np.uint8)) == 1.0
+
+    partly = np.full((16, 16, 3), 200, np.uint8)
+    partly[:4, :, 0] = 255  # a quarter of the red channel clipped
+    assert worst_channel_saturation_fraction(partly) == pytest.approx(0.25)

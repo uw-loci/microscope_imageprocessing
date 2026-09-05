@@ -63,9 +63,25 @@ def worst_channel_saturation_fraction(image: np.ndarray) -> float:
     drop exposure / illumination until the strongest channel is back under a
     per-strategy tolerance.
 
-    Per-channel for RGB (H,W,>=3); whole-frame for monochrome (H,W). Uses a
-    dtype-aware near-saturation level (uint8 / 0-255 float: 250, uint16:
-    64000, 0-1 float: 0.98). Returns 0.0 for empty / None images.
+    Saturation means CLIPPED -- the value hit the converter's ceiling and the true
+    intensity is unknown. On raw 8-bit data that is 255 and nothing else: a pixel at 254
+    carries real information, and counting it as saturated makes the AF exposure reducer
+    chase frames that were never clipped. Corrected from 250 on 2026-09-05.
+
+    A channel sitting just BELOW the ceiling -- say a mean of 254 with almost nothing at
+    255 -- is a real and damaging condition, because it has no contrast left to give the
+    focus metric. But it is compression, not clipping, and conflating the two here would
+    make this function answer neither question well. If that needs catching it wants its
+    own check.
+
+    Per-channel for RGB (H,W,>=3); whole-frame for monochrome (H,W). Uses a dtype-aware
+    ceiling (uint8 / 0-255 float: 255, uint16: 64000, 0-1 float: 0.98). Returns 0.0 for
+    empty / None images.
+
+    NOTE the uint16 level of 64000 is NOT a true ceiling and is left alone here: cameras
+    on this project deliver fewer bits than the container (the Teledyne is 14-bit, so its
+    raw maximum is 16383 and 64000 can never be reached). That wants deciding against the
+    actual detectors rather than changed in passing.
     """
     if image is None or getattr(image, "size", 0) == 0:
         return 0.0
@@ -74,7 +90,7 @@ def worst_channel_saturation_fraction(image: np.ndarray) -> float:
     elif np.issubdtype(image.dtype, np.floating) and float(image.max()) <= 1.0:
         sat_level = 0.98
     else:
-        sat_level = 250.0  # uint8 and 0-255 float
+        sat_level = 255.0  # uint8 and 0-255 float: the ceiling, not near it
     if image.ndim == 2:
         return float(np.mean(image >= sat_level))
     if image.ndim == 3 and image.shape[2] >= 1:
@@ -523,7 +539,8 @@ def build_strategy(
     cls = _STRATEGY_CLASSES.get(strategy_name)
     if cls is None:
         logger.warning(
-            "Unknown autofocus strategy '%s'; falling back to dense_texture",
+            "Autofocus strategy '%s' has no class of its own; inheriting dense_texture's "
+            "metric and behaviour. Its validity_check from YAML is still applied.",
             strategy_name,
         )
         cls = DenseTextureStrategy
@@ -544,7 +561,13 @@ def build_strategy(
 
     accepted_fields = {f.name for f in cls.__dataclass_fields__.values()}  # type: ignore[attr-defined]
     accepted_params = {k: v for k, v in flattened.items() if k in accepted_fields}
-    rejected = set(flattened) - set(accepted_params)
+    # Params consumed by a YAML-declared validity check are NOT unknown, even though the
+    # strategy dataclass has no field for them. Warning about them sent a reader looking for
+    # a typo in a line that was working correctly.
+    consumed_by_declared_check = (
+        set(params.get("validity_params") or {}) if params.get("validity_check") else set()
+    )
+    rejected = set(flattened) - set(accepted_params) - consumed_by_declared_check
     if rejected:
         logger.warning(
             "Strategy '%s' YAML had unknown params: %s (ignored)",
@@ -553,6 +576,54 @@ def build_strategy(
         )
 
     instance = cls(**accepted_params)
+
+    # The YAML's validity_check is AUTHORITATIVE. Each strategy class hardcodes a check in
+    # its is_valid, and build_strategy used to drop the YAML's declaration as a display-only
+    # annotation. That made a config silently do something other than what it said, and it
+    # cost a slide: autofocus_PPM.yml bound modality ppm to a strategy declaring
+    # chroma_deviation, the name had no class of its own, so it fell back to dense_texture
+    # and ran texture_and_area instead -- for 28,000 log lines, reporting the strategy name
+    # the operator chose next to the verdict of a check they had replaced (2026-08-29 run,
+    # slide ppm_20x_22, where 469 of 1250 autofocus attempts were skipped on that verdict).
+    #
+    # For every strategy shipped today the declared check equals the class's own, so this
+    # changes no existing behaviour -- it only stops the two from being able to disagree.
+    declared = params.get("validity_check")
+    if declared:
+        try:
+            check_fn = resolve_validity_check(str(declared))
+        except Exception as e:
+            logger.warning(
+                "Strategy '%s' declares validity_check '%s' which is not available (%s); "
+                "using %s's built-in check instead.",
+                strategy_name,
+                declared,
+                e,
+                type(instance).__name__,
+            )
+        else:
+            vp = dict(params.get("validity_params") or {})
+
+            def _is_valid(
+                image,
+                logger_=None,
+                _fn=check_fn,
+                _vp=vp,
+                _name=str(declared),
+                _strategy=strategy_name,
+            ):
+                ok, stats = _fn(image, **_vp)
+                stats = dict(stats or {})
+                stats["strategy"] = _strategy
+                stats["validity_check"] = _name
+                if logger_:
+                    (logger_.info if ok else logger_.warning)(
+                        "%s: %s (%s)", _strategy, "VALID" if ok else "REJECTED", stats
+                    )
+                return bool(ok), stats
+
+            instance.is_valid = _is_valid  # type: ignore[method-assign]
+            logger.info("Strategy '%s' uses validity_check '%s' from YAML", strategy_name, declared)
 
     if "on_failure" in params:
         try:
