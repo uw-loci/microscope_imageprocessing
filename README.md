@@ -229,6 +229,7 @@ metric = resolve_sharpness_map("tenengrad")
   - `saturation_acceptable(image)` - Check if image brightness is within strategy's saturation tolerance before trusting focus metrics
   - `saturation_threshold` - Configurable per-strategy: dense tissue/fluorescence ≈10%, sparse signal/dark-field ≈3% (tighter because signal clips in fewer pixels)
   - Other validation methods: `brightness_acceptable()`, `is_valid()`
+  - **YAML validity_check override** - When a YAML strategy config declares `validity_check`, it becomes authoritative and overrides the strategy class's built-in check. This allows YAML to customize which frame-quality test actually runs for a given strategy (e.g., using `chroma_deviation` in place of the default check). Parameters are passed via `validity_params` dict in the same YAML config block.
 
 ### `microscope_imageprocessing.focus.validity` - Validity Checks for Frame Quality
 Frame validity checks decide whether a frame is suitable for use — all are registered in a manifest and can be configured via YAML parameters. Available checks:
