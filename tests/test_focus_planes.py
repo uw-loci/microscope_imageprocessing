@@ -12,6 +12,7 @@ import numpy as np
 import pytest
 
 from microscope_imageprocessing.focus.planes import (
+    BLOCK_LIVE_RATIO,
     MIN_AGREEING_BLOCKS,
     MIN_DISPERSION,
     _dispersion,
@@ -139,6 +140,31 @@ def test_thresholds_sit_in_the_measured_gaps():
     """
     assert 8 < MIN_AGREEING_BLOCKS < 14
     assert 0.247 < MIN_DISPERSION < 0.366
+
+
+def test_the_glass_surface_is_rejected_on_amplitude_because_geometry_cannot_see_it():
+    """The blank scan's real lesson: dispersion is blind to a featureless plane.
+
+    Blank glass at position A brings its own surface into focus at Z=-224.5, field-wide --
+    2 percent on the frame mean, dispersion 0.424, the 8x8 maximum. It is spatially
+    indistinguishable from tissue. What separates them is how HARD each block peaks, so this
+    pins the amplitude bar rather than the spatial one.
+    """
+    everywhere = list(range(GRID * GRID))
+
+    # Identical geometry, two amplitudes: glass as measured, tissue as measured at A.
+    zs, glass = _scan([(-224.5, everywhere, 1.05)])
+    _, tissue = _scan([(-224.5, everywhere, 1.30)])
+
+    assert not detect_focus_plane(zs, glass).found, "glass surface must not be committed to"
+    assert detect_focus_plane(zs, tissue).found, "same footprint, real amplitude, must pass"
+
+    # ...and the spatial test would have waved the glass through, had it been asked.
+    assert _dispersion(everywhere, GRID) > MIN_DISPERSION
+
+    # The bar has to clear the measured noise floor (p90 1.06) and still admit A's tissue,
+    # whose blocks lift only 1.2-1.35x. The blank falsely accepts at 1.04.
+    assert 1.06 < BLOCK_LIVE_RATIO <= 1.2
 
 
 def test_block_profile_shape_and_orientation():

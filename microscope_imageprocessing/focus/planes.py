@@ -38,7 +38,16 @@ Both criteria separate those four on their own, and both are applied, because th
 false accept (focusing on debris, or driving further into the slide than needed) is much
 higher than the cost of a false reject (fall back to the caller's slower path).
 
-This is calibrated on FOUR planes. The thresholds sit in the gaps -- 10 blocks between 8 and
+A fifth scan, of blank glass at position A, says what the two criteria do NOT do. It has
+no tissue and one dust speck, and the whole-frame metric has nothing to lock onto -- but the
+bare glass surface still comes into focus, at Z=-224.5, and it does so ACROSS THE WHOLE
+FIELD: 2 percent on the frame mean (still there with the dust block removed), 11 blocks
+peaking within 8 um of it against 2 expected by chance, and dispersion 0.424 -- the 8x8
+theoretical maximum. A featureless plane is perfectly spread out, so dispersion ranks it
+exactly like tissue. Only its AMPLITUDE gives it away, which makes ``block_live_ratio`` the
+discriminator that matters here, not the spatial test. See its own note below.
+
+This is calibrated on FIVE planes. The thresholds sit in the gaps -- 10 blocks between 8 and
 14, dispersion 0.30 between 0.247 and 0.366 -- but those gaps are narrow and four points is
 not a distribution. Re-measure before trusting these on a different stain or objective.
 """
@@ -61,14 +70,28 @@ DEFAULT_GRID = 8
 #: A block is "live" -- it has a focus plane worth believing -- when its own peak stands
 #: this far above its own median across the traverse. Per-block rather than per-frame, so a
 #: dim corner is judged against itself.
-BLOCK_LIVE_RATIO = 1.3
+#:
+#: Treat this as the load-bearing threshold, not a noise filter. It is the ONLY test that
+#: separates the sample from the glass it sits on, because the glass surface's own focus
+#: plane is field-wide and therefore scores maximum dispersion (see the module docstring).
+#: Measured on the blank-glass scan, 371 frames: noise blocks sit at 1.04 (median) / 1.06
+#: (p90); the glass plane at Z=-224.5 draws 2 agreeing blocks at 1.20, 7 at 1.05, and 11 --
+#: a false accept -- at 1.04. The collapse is a cliff, not a slope: 1.045 gives 24 live
+#: blocks, 1.04 gives 48. Do not go near it.
+#:
+#: 1.2 rather than 1.3 because position A's real tissue lifts its blocks only 1.2-1.35x,
+#: right at the old bar, while costing the blank nothing: 1 live block became 2, against a
+#: bar of 10 agreeing.
+BLOCK_LIVE_RATIO = 1.2
 
 #: Blocks agreeing on a plane must number at least this many, of grid*grid.
 MIN_AGREEING_BLOCKS = 10
 
 #: ...and must be spread across the frame rather than clustered on one object. Mean pairwise
 #: block distance over the grid diagonal; a uniform scatter scores about 0.42, a corner blob
-#: about 0.2.
+#: about 0.2. This rejects LOCAL debris -- a fibre, a speck -- and nothing else: a featureless
+#: plane such as the glass surface is maximally spread and sails through. Amplitude, not
+#: geometry, is what stops that one.
 MIN_DISPERSION = 0.30
 
 #: Two blocks are talking about the same plane if their best-focus Z agree within this.
