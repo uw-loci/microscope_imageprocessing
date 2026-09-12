@@ -47,7 +47,7 @@ logger = logging.getLogger(__name__)
 # --------------------------------------------------------------- helpers
 
 
-def to_gray(image: np.ndarray) -> np.ndarray:
+def to_gray(image: np.ndarray, reduction: str = "equal_mean") -> np.ndarray:
     """Reduce a multi-component frame to a 2D grayscale array.
 
     Equal-weighted mean across colour channels (alpha dropped):
@@ -78,6 +78,32 @@ def to_gray(image: np.ndarray) -> np.ndarray:
     Earlier failure modes (kept for context):
       Stage 1 (pre-2026-05-04): green-channel-only -- eosin absorbs in
       G so the green channel sees flat illumination across Z. Failed.
+
+    Stage 4 (2026-09-12, ``reduction="green"``): green is back, as an OPT-IN,
+    because the equal-mean reduction is what lets achromatic debris outrank
+    stained tissue. A dark fibre or a dust speck has the same contrast in all
+    three channels; tissue's contrast is concentrated where its stain absorbs.
+    Averaging the channels therefore keeps all of the debris signal and dilutes
+    the tissue's, and on a field containing both the debris wins outright.
+
+    Measured on four PPM 20x traverses, 2026-09-04, scoring with the metric the
+    server actually runs (verified against the recorded values, corr=1.000):
+
+      field                equal-mean            green
+      A fibre + tissue     -219.2  WRONG         -327.6  right (truth -332)
+      B dust only           -284.5  9.8% amp      -284.5  6.9% amp
+      C clean tissue       -349.0  right 58.6%   -350.2  right 66.1%
+      A' flat rescan       nothing found         nothing found
+
+    Green is better or equal on all four, and shows no sign of the Stage 1
+    failure: 27.8% and 66.1% amplitude on the two tissue fields is not "flat
+    illumination across Z". Stage 1 was measured on a different white balance
+    (before per-angle exposure calibration), so treat that finding as scoped to
+    its calibration rather than to the green channel as such.
+
+    This stays opt-in per objective: equal-mean is also what makes streaming AF
+    agree with standard AF's ``extract_green_channel``, and changing it globally
+    would silently desync the two paths on every scope at once.
       Stage 2 (2026-05-04 BGRA fix attempt): BT.601 with correct R
       index for BGRA. Made the metric responsive but to the wrong
       feature on PPM. Replaced with equal-mean (matches the working
@@ -90,6 +116,10 @@ def to_gray(image: np.ndarray) -> np.ndarray:
         return arr.astype(np.float64, copy=False)
     if arr.ndim == 3:
         nch = arr.shape[2]
+        if reduction == "green" and nch >= 3:
+            # Index 1 in both layouts the cameras produce here: BGRA from
+            # Micro-Manager, and RGB after debayer.
+            return arr[:, :, 1].astype(np.float64, copy=False)
         if nch >= 4:
             # BGRA: drop alpha (last channel), equal-weight B/G/R.
             arr_f = arr.astype(np.float64, copy=False)
@@ -274,7 +304,7 @@ _IMPLEMENTATIONS: dict[str, Callable[[np.ndarray], float]] = {
 }
 
 
-def resolve_metric(name: str) -> Callable[[np.ndarray], float]:
+def resolve_metric(name: str, reduction: str = "equal_mean") -> Callable[[np.ndarray], float]:
     """Look up the metric function for a canonical name.
 
     Raises :class:`UnknownMetricError` for unknown names. If the name
@@ -302,16 +332,17 @@ def resolve_metric(name: str) -> Callable[[np.ndarray], float]:
             f"in microscope_imageprocessing.focus.metrics. This is a packaging "
             f"bug; please report."
         )
-    return _wrap_with_preprocessing(impl)
+    return _wrap_with_preprocessing(impl, reduction)
 
 
 def _wrap_with_preprocessing(
     impl: Callable[[np.ndarray], float],
+    reduction: str = "equal_mean",
 ) -> Callable[[np.ndarray], float]:
     """Adapt a 2D-grayscale metric to also accept multi-channel input."""
 
     def metric(image: np.ndarray) -> float:
-        gray = to_gray(image)
+        gray = to_gray(image, reduction)
         if gray.size == 0:
             return 0.0
         try:
