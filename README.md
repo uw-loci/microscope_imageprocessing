@@ -220,7 +220,8 @@ metric = resolve_sharpness_map("tenengrad")
 
 ### `microscope_imageprocessing.focus` - Focus Metrics and Autofocus Strategies
 - `worst_channel_saturation_fraction()` - Measure pixel saturation (0-1) in the worst channel; used by AF auto-exposure control to prevent metric inversion from clipping
-- `to_gray()` - Reduce multi-channel image to grayscale with equal-weighted mean
+- `to_gray(image, reduction="equal_mean")` - Reduce multi-channel image to grayscale. Default `reduction="equal_mean"` averages all channels. Use `reduction="green"` (opt-in) to extract the green plane alone, which better distinguishes stained tissue from achromatic debris like dust or fibres.
+- `resolve_metric(name, reduction="equal_mean")` - Look up a focus metric by name, with optional channel reduction strategy (same options as `to_gray()`)
 - **Plane Detection** - Distinguish sample from debris when selecting a focus plane:
   - `detect_focus_plane(zs, profiles, ...)` - Find the Z where the sample is, by measuring where sharpness concentrates (not how much). Returns `PlaneResult` with the best Z or rejection reason. Calibrated for 8×8 block grids; rejects fields where only debris is sharp.
   - `block_focus_profile(image, grid)` - Compute per-block focus metric: mean squared gradient for each grid cell (default 8×8). Returns grid×grid array used as input to `detect_focus_plane()`.
