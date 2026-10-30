@@ -41,6 +41,7 @@ logger = logging.getLogger(__name__)
 
 FLATFIELD_FILE = "flatfield.tif"
 PROFILE_FILE = "profile.yml"
+PREVIEW_FILE = "flatfield_preview.png"
 DEFAULT_WORKING_SIZE = 128
 DEFAULT_MAX_IMAGES = 500
 MM_CHANNEL_TAG = 51123
@@ -208,7 +209,7 @@ class FlatfieldProfile:
         return np.clip(rounded, limits.min, limits.max).astype(image.dtype), clipped
 
     def save(self, folder: pathlib.Path) -> pathlib.Path:
-        """Write ``flatfield.tif`` and ``profile.yml`` to a folder, creating it if needed."""
+        """Write the profile and a picture of the shading to a folder, creating it if needed."""
         folder = pathlib.Path(folder)
         folder.mkdir(parents=True, exist_ok=True)
         tf.imwrite(folder / FLATFIELD_FILE, self.flatfield.astype(np.float32))
@@ -220,6 +221,12 @@ class FlatfieldProfile:
         )
         with open(folder / PROFILE_FILE, "w", encoding="ascii") as stream:
             yaml.safe_dump(record, stream, sort_keys=False)
+        low, high = float(self.flatfield.min()), float(self.flatfield.max())
+        scaled = (self.flatfield - low) / max(high - low, 1e-6) * 255
+        cv2.imwrite(
+            str(folder / PREVIEW_FILE),
+            cv2.applyColorMap(scaled.astype(np.uint8), cv2.COLORMAP_VIRIDIS),
+        )
         return folder
 
     @classmethod

@@ -120,6 +120,7 @@ def test_save_and_load_round_trip(tmp_path):
     assert loaded.metadata["detector"] == "PMT_top"
     assert loaded.metadata["algorithm"] == "basic-approximate"
     assert loaded.metadata["width"] == SIZE
+    assert (tmp_path / "profile" / ff.PREVIEW_FILE).exists()
 
 
 def test_fit_refuses_one_image_and_no_signal():
