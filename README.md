@@ -79,6 +79,8 @@ profile = FlatfieldProfile.load("profiles/shg_top_10x")
 corrected, clipped_pixels = profile.apply(raw_plane)
 ```
 
+`save` writes `flatfield.tif`, `profile.yml` and `flatfield_preview.png`, a color picture of the fitted shading for a quick visual check.
+
 From the command line: `python -m microscope_imageprocessing.correction.flatfield tiles/ profiles/shg_top_10x --channel 0`.
 
 - The correction is `(raw - offset) / flatfield + offset`, so the background keeps its value.
