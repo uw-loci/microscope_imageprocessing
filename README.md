@@ -61,6 +61,35 @@ debayer = CPUDebayer(pattern='RGGB')
 rgb_image = debayer.debayer(bayer_image)
 ```
 
+### Flat-Field Profiles (BaSiC)
+
+A PMT or laser scanner shades its field, but an empty field reads only the detector offset, so there
+is no background image to divide by. `fit_profile` estimates the shading from the tiles instead,
+using a NumPy port of [BaSiCPy](https://github.com/peng-lab/BaSiCPy)'s fit (Peng et al. 2017,
+[doi:10.1038/ncomms14836](https://doi.org/10.1038/ncomms14836)).
+
+```python
+from microscope_imageprocessing.correction import FlatfieldProfile, fit_profile, read_tile_planes
+
+planes = read_tile_planes("tiles/", channel=0)   # QPSC tiles or MicroManager folders
+profile = fit_profile(planes)                    # offset estimated from the darkest tiles
+profile.save("profiles/shg_top_10x")
+
+profile = FlatfieldProfile.load("profiles/shg_top_10x")
+corrected, clipped_pixels = profile.apply(raw_plane)
+```
+
+From the command line: `python -m microscope_imageprocessing.correction.flatfield tiles/ profiles/shg_top_10x --channel 0`.
+
+- The correction is `(raw - offset) / flatfield + offset`, so the background keeps its value.
+- Apply it to each raw plane, before averaging, projecting, flipping or rotating.
+- Fit on raw planes or averaged frames, never on max, sum or EDF projections.
+- A profile belongs to a detector, objective, zoom and channel, so it also corrects data it cannot be
+  fitted from, such as a single-position Z-stack or time-lapse.
+- It makes intensity even. It does not improve signal to noise: the dim corners carry more noise after
+  correction.
+- Confluent tissue has no empty field to read the offset from; pass a measured `offset=`.
+
 ### Background Correction
 
 ```python
@@ -186,6 +215,7 @@ metric = resolve_sharpness_map("tenengrad")
 
 ### `microscope_imageprocessing.correction` - Background Correction
 - `BackgroundCorrectionUtils` - Flat-field correction and background color estimation
+- `fit_profile`, `FlatfieldProfile` - Flat-field profiles fitted from the tiles themselves (BaSiC), for detectors with no usable background image
 
 ### `microscope_imageprocessing.io` - Image I/O
 - `ome_tiff_writer()` - Write OME-TIFF files with pixel size and resolution metadata
