@@ -88,7 +88,7 @@ From the command line: `python -m microscope_imageprocessing.correction.flatfiel
   fitted from, such as a single-position Z-stack or time-lapse.
 - It makes intensity even. It does not improve signal to noise: the dim corners carry more noise after
   correction.
-- Confluent tissue has no empty field to read the offset from; pass a measured `offset=`.
+- Confluent tissue has no empty field to read the offset from; pass a measured `offset=` (`--offset` on the command line).
 
 ### Background Correction
 
