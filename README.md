@@ -221,6 +221,7 @@ metric = resolve_sharpness_map("tenengrad")
 - `BackgroundCorrectionUtils` - Flat-field correction and background color estimation
 - `fit_profile`, `FlatfieldProfile` - Flat-field profiles fitted from the tiles themselves (BaSiC), for detectors with no usable background image
 - `read_tile_planes(folder, channel=None)` - Read raw single-channel planes for a fit from QPSC or MicroManager tile folders
+- `load_profile_set(folder, channels=())` - Read the profiles chosen for an acquisition, keyed by channel id (`None` for the one covering every image)
 - `estimate_offset(images)` - Detector offset from the darkest images (used by `fit_profile` when no `offset=` is given)
 
 ### `microscope_imageprocessing.io` - Image I/O
