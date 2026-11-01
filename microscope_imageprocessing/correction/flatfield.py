@@ -57,10 +57,12 @@ _MAX_REWEIGHT_ITERATIONS = 10
 _OPTIMIZATION_TOL = 1e-3
 _REWEIGHTING_TOL = 1e-2
 
-# Empty fields hold detector noise, which the optics do not shade, so they pull a fit toward flat:
-# on the OWS3 SHG run, fitting every tile recovered 0.83 of a known shading and fitting the brighter
-# tiles 0.93. Too few images matter more than that, so all are kept below this count.
-_MIN_IMAGES_TO_SELECT = 40
+# Empty fields hold detector noise, which the optics do not shade, so they pull a fit toward flat: on
+# the OWS3 SHG run, fitting every tile recovered 0.83 of a known shading and the brighter half 0.92.
+# Too few images are worse. From random draws of that run's tissue tiles, 20 usually gave a nearly
+# flat answer with no error, 40 stayed within 0.033 rms of the full fit, and 125 within 0.024. So the
+# darkest images go only while this many remain, and a fit of fewer is flagged in its metadata.
+MIN_IMAGES_FOR_FIT = 40
 
 
 def _shrink(values: np.ndarray, threshold) -> np.ndarray:
@@ -239,6 +241,32 @@ class FlatfieldProfile:
         return cls(flatfield=flatfield, offset=float(record.pop("offset")), metadata=record)
 
 
+def load_profile_set(
+    folder: pathlib.Path, channels: Sequence[str] = ()
+) -> Dict[Optional[str], FlatfieldProfile]:
+    """
+    Read the profiles in a folder chosen for an acquisition.
+
+    A profile directly in the folder covers every image; ``<folder>/<channel id>/`` covers one
+    channel and takes precedence for it. This matches how a tile folder holds its channels.
+
+    Args:
+        folder: the folder
+        channels: channel ids to look for
+
+    Returns:
+        Profiles keyed by channel id, with None for the one covering every image
+    """
+    folder = pathlib.Path(folder)
+    profiles: Dict[Optional[str], FlatfieldProfile] = {}
+    if (folder / PROFILE_FILE).is_file():
+        profiles[None] = FlatfieldProfile.load(folder)
+    for channel in channels:
+        if (folder / channel / PROFILE_FILE).is_file():
+            profiles[channel] = FlatfieldProfile.load(folder / channel)
+    return profiles
+
+
 def fit_profile(
     images: Sequence[np.ndarray],
     offset: Optional[float] = None,
@@ -253,8 +281,8 @@ def fit_profile(
 
     Args:
         images: at least two single-channel images of the same size, from different fields.
-            Dozens with varied content give a usable fit. From 40 images up, the brighter half
-            is fitted.
+            Use at least 40 with tissue in them: fewer can come out nearly flat with no error.
+            The brighter half is fitted, keeping at least 40.
         offset: detector offset in raw counts; estimated from the darkest images when None
         working_size: images are reduced to this size for the fit
         metadata: extra fields for ``profile.yml``
@@ -275,9 +303,15 @@ def fit_profile(
     )
     if small.mean() <= 0:
         raise ValueError(f"No signal above the offset of {offset:.1f}")
-    if len(small) >= _MIN_IMAGES_TO_SELECT:
-        order = np.argsort(small.mean(axis=(1, 2)))
-        small = small[order[len(small) // 2 :]]
+    keep = max(MIN_IMAGES_FOR_FIT, len(small) // 2)
+    if len(small) > keep:
+        small = small[np.argsort(small.mean(axis=(1, 2)))[-keep:]]
+    if len(small) < MIN_IMAGES_FOR_FIT:
+        logger.warning(
+            "Fitting %d images; below %d a fit can come out nearly flat with no error",
+            len(small),
+            MIN_IMAGES_FOR_FIT,
+        )
 
     shading = _fit_shading(small)
     flatfield = cv2.resize(shading, (width, height), interpolation=cv2.INTER_LINEAR)

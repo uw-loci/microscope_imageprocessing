@@ -9,6 +9,7 @@ from microscope_imageprocessing.correction.flatfield import (
     FlatfieldProfile,
     estimate_offset,
     fit_profile,
+    load_profile_set,
     read_tile_planes,
 )
 
@@ -57,9 +58,35 @@ def test_flatfield_has_mean_one_at_full_size():
 
 
 def test_dark_half_is_left_out_of_a_large_fit():
+    profile = fit_profile(tiles(100, known_shading(), empty_every=2), offset=OFFSET)
+    assert profile.metadata["images_read"] == 100
+    assert profile.metadata["images_used"] == 50
+
+
+def test_selection_never_takes_a_fit_below_the_minimum():
     profile = fit_profile(tiles(60, known_shading(), empty_every=2), offset=OFFSET)
-    assert profile.metadata["images_read"] == 60
-    assert profile.metadata["images_used"] == 30
+    assert profile.metadata["images_used"] == ff.MIN_IMAGES_FOR_FIT
+
+
+def test_a_small_fit_uses_every_image_and_warns(caplog):
+    profile = fit_profile(tiles(12, known_shading()), offset=OFFSET)
+    assert profile.metadata["images_used"] == 12
+    assert "nearly flat" in caplog.text
+
+
+def test_a_profile_set_covers_channels_with_their_own_folder(tmp_path):
+    common = FlatfieldProfile(flatfield=np.ones((4, 4), dtype=np.float32), offset=1.0)
+    dapi = FlatfieldProfile(flatfield=np.ones((4, 4), dtype=np.float32), offset=2.0)
+    common.save(tmp_path)
+    dapi.save(tmp_path / "DAPI")
+    profiles = load_profile_set(tmp_path, ["DAPI", "FITC"])
+    assert sorted(str(k) for k in profiles) == ["DAPI", "None"]
+    assert profiles["DAPI"].offset == 2.0
+    assert profiles[None].offset == 1.0
+
+
+def test_a_folder_with_no_profile_gives_an_empty_set(tmp_path):
+    assert load_profile_set(tmp_path, ["DAPI"]) == {}
 
 
 def test_offset_comes_from_the_empty_fields_not_the_noise_floor():

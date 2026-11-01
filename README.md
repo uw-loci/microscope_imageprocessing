@@ -86,6 +86,8 @@ From the command line: `python -m microscope_imageprocessing.correction.flatfiel
 - The correction is `(raw - offset) / flatfield + offset`, so the background keeps its value.
 - Apply it to each raw plane, before averaging, projecting, flipping or rotating.
 - Fit on raw planes or averaged frames, never on max, sum or EDF projections.
+- Fit at least 40 tiles with tissue in them. On the OWS3 SHG run, 20 usually came out nearly flat with no error, 40 stayed within 0.033 rms of a fit to 250, and 125 within 0.024.
+- For an acquisition, `load_profile_set` reads a folder holding one profile for every image, one per `<channel id>/` subfolder, or both.
 - A profile belongs to a detector, objective, zoom and channel, so it also corrects data it cannot be
   fitted from, such as a single-position Z-stack or time-lapse.
 - It makes intensity even. It does not improve signal to noise: the dim corners carry more noise after
