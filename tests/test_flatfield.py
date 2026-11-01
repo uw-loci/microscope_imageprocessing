@@ -150,6 +150,41 @@ def test_save_and_load_round_trip(tmp_path):
     assert (tmp_path / "profile" / ff.PREVIEW_FILE).exists()
 
 
+def confluent_tiles(count=80, size=64, seed=0):
+    """Tissue everywhere, so no tile is an empty field, with a dim corner."""
+    rng = np.random.default_rng(seed)
+    y, x = np.mgrid[0:size, 0:size] / (size - 1.0)
+    shading = 1.15 - 0.9 * (x**2 + y**2) / 2
+    return [
+        np.clip(
+            OFFSET + rng.uniform(900, 1800) * shading + rng.normal(0, 20, (size, size)), 0, None
+        ).astype(np.uint16)
+        for _ in range(count)
+    ]
+
+
+def test_an_offset_read_from_tissue_is_refused_not_saved():
+    with pytest.raises(ValueError, match="measured offset"):
+        fit_profile(confluent_tiles())
+
+
+def test_the_same_tiles_fit_with_a_measured_offset():
+    profile = fit_profile(confluent_tiles(), offset=OFFSET)
+    # The true corner is 0.25 / 0.85 of the mean
+    assert profile.flatfield.min() == pytest.approx(0.29, abs=0.03)
+
+
+def test_a_flatfield_at_or_below_zero_cannot_be_built_or_loaded(tmp_path):
+    flat = np.ones((4, 4), dtype=np.float32)
+    flat[0, 0] = 0.0
+    with pytest.raises(ValueError, match="above zero"):
+        FlatfieldProfile(flatfield=flat, offset=0.0)
+    FlatfieldProfile(flatfield=np.ones((4, 4), dtype=np.float32), offset=0.0).save(tmp_path)
+    tf.imwrite(tmp_path / ff.FLATFIELD_FILE, flat)
+    with pytest.raises(ValueError, match="above zero"):
+        FlatfieldProfile.load(tmp_path)
+
+
 def test_fit_refuses_one_image_and_no_signal():
     with pytest.raises(ValueError, match="at least two"):
         fit_profile(tiles(1, known_shading()), offset=OFFSET)

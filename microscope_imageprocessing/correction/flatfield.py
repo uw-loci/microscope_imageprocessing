@@ -64,6 +64,11 @@ _REWEIGHTING_TOL = 1e-2
 # darkest images go only while this many remain, and a fit of fewer is flagged in its metadata.
 MIN_IMAGES_FOR_FIT = 40
 
+# Dividing by less than this would multiply a pixel tenfold or corrupt it outright. A fit that goes
+# this low has usually been given an offset that is too high: on confluent tissue the darkest tiles
+# hold tissue, not an empty field, and everything below that level is clipped to zero.
+MIN_FLATFIELD = 0.1
+
 
 def _shrink(values: np.ndarray, threshold) -> np.ndarray:
     """Soft threshold: pull every value toward zero by ``threshold``."""
@@ -186,6 +191,11 @@ class FlatfieldProfile:
     flatfield: np.ndarray
     offset: float
     metadata: Dict = dataclasses.field(default_factory=dict)
+
+    def __post_init__(self):
+        # A saved or hand-made profile must not reach the divide in apply either
+        if not np.all(self.flatfield > 0):
+            raise ValueError("A flat-field must be above zero everywhere")
 
     def apply(self, image: np.ndarray) -> Tuple[np.ndarray, int]:
         """
@@ -316,6 +326,11 @@ def fit_profile(
     shading = _fit_shading(small)
     flatfield = cv2.resize(shading, (width, height), interpolation=cv2.INTER_LINEAR)
     flatfield = flatfield / flatfield.mean()
+    if flatfield.min() < MIN_FLATFIELD:
+        raise ValueError(
+            f"The fit reached {flatfield.min():.3f} of the mean with an offset of {offset:.1f}. "
+            "If these tiles have no empty fields, enter the detector's measured offset"
+        )
 
     record = dict(metadata or {})
     record.update(
