@@ -275,15 +275,16 @@ def _hybrid_sharpness_metric(gray: np.ndarray) -> float:
         return 0.0
     from skimage.filters import gaussian
 
-    smoothed = gaussian(gray, sigma=1.5)
-    gy, gx = np.gradient(smoothed.astype(np.float32))
-    gradient_magnitude = gx**2 + gy**2
+    smoothed = gaussian(gray, sigma=1.5).astype(np.float64)
+    # The Brenner term is _brenner_gradient's: lag-2 horizontal differences, centered
+    # on the pixel between them, so the weight is taken from that middle column.
+    d = smoothed[:, 2:] - smoothed[:, :-2]
     rng = float(gray.max() - gray.min())
     if rng < 1e-10:
         return 0.0
     normalized = (gray - gray.min()) / (rng + 1e-10)
     weight_mask = 1.0 - np.abs(normalized - 0.5) * 2.0
-    return float(np.mean(gradient_magnitude * weight_mask))
+    return float(np.mean(d * d * weight_mask[:, 1:-1]))
 
 
 # ------------------------------------------------------------- registry

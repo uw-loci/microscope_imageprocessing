@@ -241,3 +241,17 @@ def test_p98_p2_separates_dynamic_range():
     flat = np.full((64, 64), 500.0, dtype=np.float64)
     assert fn(sharp) > 100.0
     assert fn(flat) == 0.0
+
+
+def test_hybrid_and_brenner_use_the_same_lag2_horizontal_term():
+    # Structure that varies only down the rows has no horizontal lag-2 difference, so the
+    # canonical Brenner reads zero, and so must the hybrid metric built on it. The old
+    # np.gradient form scored this field on its vertical gradient.
+    rng = np.random.default_rng(7)
+    column = rng.uniform(50, 200, size=64)
+    image = np.repeat(column[:, None], 64, axis=1)
+    assert resolve_metric("brenner_gradient")(image) == 0.0
+    assert resolve_metric("hybrid_sharpness_metric")(image) == 0.0
+    # Rotated 90 degrees the same structure is horizontal, and both see it.
+    assert resolve_metric("brenner_gradient")(image.T) > 0
+    assert resolve_metric("hybrid_sharpness_metric")(image.T) > 0
