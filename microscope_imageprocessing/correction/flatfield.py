@@ -34,7 +34,6 @@ from typing import Dict, List, Optional, Sequence, Tuple
 import cv2
 import numpy as np
 import tifffile as tf
-import yaml
 from scipy.fft import dctn, idctn
 
 logger = logging.getLogger(__name__)
@@ -231,6 +230,8 @@ class FlatfieldProfile:
             width=int(self.flatfield.shape[1]),
             height=int(self.flatfield.shape[0]),
         )
+        import yaml  # here, not at the top: see tests/test_import_without_yaml.py
+
         with open(folder / PROFILE_FILE, "w", encoding="ascii") as stream:
             yaml.safe_dump(record, stream, sort_keys=False)
         low, high = float(self.flatfield.min()), float(self.flatfield.max())
@@ -244,6 +245,8 @@ class FlatfieldProfile:
     @classmethod
     def load(cls, folder: pathlib.Path) -> "FlatfieldProfile":
         """Read a profile written by :meth:`save`."""
+        import yaml
+
         folder = pathlib.Path(folder)
         with open(folder / PROFILE_FILE, encoding="ascii") as stream:
             record = yaml.safe_load(stream)
